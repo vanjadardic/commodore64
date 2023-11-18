@@ -5,6 +5,7 @@ use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::PixelFormatEnum;
 use sdl2::video::FullscreenType;
+
 use crate::emulator::emulator::Emulator;
 
 const DEFAULT_SCREEN_SCALE: u32 = 4;
@@ -42,6 +43,7 @@ pub fn main() -> Result<(), String> {
     // let vec = fs::read(f_name)
     //     .map_err(|e| format!("Error loading file '{}': {}", f_name, e.to_string()))?;
     let mut emulator = Emulator::new();
+    emulator.load();
 
     canvas.present();
     let mut event_pump = sdl_context.event_pump()?;
