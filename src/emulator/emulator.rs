@@ -76,54 +76,41 @@ impl Emulator {
                 }
                 Err(format!("Illegal sub_tick {} for opcode {:#04x}", self.sub_tick, x))
             }
-            x @ 0xAD => { // LDA
-                if self.sub_tick == 2 || self.sub_tick == 3 {
-                    self.absolute_addressing();
-                    return Ok(());
-                }
-                if self.sub_tick == 4 {
-                    self.cpu.a = self.memory.get_from_low_high(self.low_address_byte, self.high_address_byte);
-                    self.sub_tick = 1;
-                    return Ok(());
-                }
-                Err(format!("Illegal sub_tick {} for opcode {:#04x}", self.sub_tick, x))
-            }
-            x @ 0xAE => { // LDX
-                if self.sub_tick == 2 || self.sub_tick == 3 {
-                    self.absolute_addressing();
-                    return Ok(());
-                }
-                if self.sub_tick == 4 {
-                    self.cpu.x = self.memory.get_from_low_high(self.low_address_byte, self.high_address_byte);
-                    self.sub_tick = 1;
-                    return Ok(());
-                }
-                Err(format!("Illegal sub_tick {} for opcode {:#04x}", self.sub_tick, x))
-            }
-            x @ 0xAC => { // LDY
-                if self.sub_tick == 2 || self.sub_tick == 3 {
-                    self.absolute_addressing();
-                    return Ok(());
-                }
-                if self.sub_tick == 4 {
-                    self.cpu.y = self.memory.get_from_low_high(self.low_address_byte, self.high_address_byte);
-                    self.sub_tick = 1;
-                    return Ok(());
-                }
-                Err(format!("Illegal sub_tick {} for opcode {:#04x}", self.sub_tick, x))
-            }
-            x => Err(format!("Unknown opcode {:#04x}", x))
+            x @ 0xAD => self.absolute_addressing(Emulator::lda, x),
+            x @ 0xAE => self.absolute_addressing(Emulator::ldx, x),
+            x @ 0xAC => self.absolute_addressing(Emulator::ldy, x),
+            x => Err(format!("Illegal opcode {:#04x}", x))
         }
     }
 
-    fn absolute_addressing(&mut self) {
+    fn absolute_addressing(&mut self, op: fn(&mut Emulator), opcode: u8) -> Result<(), String> {
         if self.sub_tick == 2 {
             self.low_address_byte = self.memory.get_from_pc(self.cpu.get_and_increment_pc());
             self.sub_tick += 1;
+            return Ok(());
         }
         if self.sub_tick == 3 {
             self.high_address_byte = self.memory.get_from_pc(self.cpu.get_and_increment_pc());
             self.sub_tick += 1;
+            return Ok(());
         }
+        if self.sub_tick == 4 {
+            op(self);
+            self.sub_tick = 1;
+            return Ok(());
+        }
+        Err(format!("Illegal sub_tick {} for opcode {:#04x}", self.sub_tick, opcode))
+    }
+
+    fn lda(&mut self) {
+        self.cpu.a = self.memory.get_from_low_high(self.low_address_byte, self.high_address_byte);
+    }
+
+    fn ldx(&mut self) {
+        self.cpu.x = self.memory.get_from_low_high(self.low_address_byte, self.high_address_byte);
+    }
+
+    fn ldy(&mut self) {
+        self.cpu.y = self.memory.get_from_low_high(self.low_address_byte, self.high_address_byte);
     }
 }
