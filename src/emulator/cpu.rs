@@ -7,15 +7,15 @@ pub struct Cpu {
     pub y: u8,
 }
 
-enum Flag {
-    N,
-    V,
-    B,
-    D,
-    I,
-    Z,
-    C,
-}
+// enum Flag {
+//     N,
+//     V,
+//     B,
+//     D,
+//     I,
+//     Z,
+//     C,
+// }
 
 impl Cpu {
     pub fn new() -> Cpu {

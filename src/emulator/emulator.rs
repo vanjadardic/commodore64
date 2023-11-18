@@ -3,14 +3,14 @@ use std::time::Duration;
 use crate::emulator::cpu::Cpu;
 use crate::emulator::memory::Memory;
 
-const MASTER_CLOCK_PAL: u128 = 17_734_475;
-const MASTER_CLOCK_NTSC: u128 = 14_318_180;
+// const MASTER_CLOCK_PAL: u128 = 17_734_475;
+// const MASTER_CLOCK_NTSC: u128 = 14_318_180;
 
 const CLOCK_PAL: u128 = 985_248;
-const CLOCK_NTSC: u128 = 1_022_727;
+// const CLOCK_NTSC: u128 = 1_022_727;
 
-const CLOCK_VICII_PAL: u128 = CLOCK_PAL * 8;
-const CLOCK_VICII_NTSC: u128 = CLOCK_NTSC * 8;
+// const CLOCK_VICII_PAL: u128 = CLOCK_PAL * 8;
+// const CLOCK_VICII_NTSC: u128 = CLOCK_NTSC * 8;
 
 const NANOS_PER_SEC: u128 = 1_000_000_000;
 const CLOCK: u128 = CLOCK_PAL;
@@ -29,21 +29,20 @@ pub struct Emulator {
 
 impl Emulator {
     pub fn new() -> Emulator {
+        let memory = Memory::new();
+        let mut cpu = Cpu::new();
+        let low = memory.get_from_pc(0xFFFC);
+        let high = memory.get_from_pc(0xFFFD);
+        cpu.pc = ((low as u16) & 0x00FF) | (((high as u16) << 8) & 0xFF00);
         Emulator {
             tick_count: 0,
-            memory: Memory::new(),
-            cpu: Cpu::new(),
+            memory,
+            cpu,
             sub_tick: 1,
             opcode: 0,
             low_address_byte: 0,
             high_address_byte: 0,
         }
-    }
-
-    pub fn load(&mut self) {
-        self.memory.set(0x0000, 0x4C);
-        self.memory.set(0x0001, 0xF0);
-        self.memory.set(0x0002, 0x33);
     }
 
     pub fn step(&mut self, elapsed: Duration) -> Result<(), String> {
@@ -77,13 +76,14 @@ impl Emulator {
                 Err(format!("Illegal sub_tick {} for opcode {:#04x}", self.sub_tick, x))
             }
             x @ 0xAD => self.absolute_addressing(Emulator::lda, x),
+            x @ 0xA2 => self.immediate_addressing(Emulator::ldx, x),
             x @ 0xAE => self.absolute_addressing(Emulator::ldx, x),
             x @ 0xAC => self.absolute_addressing(Emulator::ldy, x),
             x => Err(format!("Illegal opcode {:#04x}", x))
         }
     }
 
-    fn absolute_addressing(&mut self, op: fn(&mut Emulator), opcode: u8) -> Result<(), String> {
+    fn absolute_addressing(&mut self, op: fn(&mut Emulator, u8), opcode: u8) -> Result<(), String> {
         if self.sub_tick == 2 {
             self.low_address_byte = self.memory.get_from_pc(self.cpu.get_and_increment_pc());
             self.sub_tick += 1;
@@ -95,22 +95,33 @@ impl Emulator {
             return Ok(());
         }
         if self.sub_tick == 4 {
-            op(self);
+            let value = self.memory.get_from_low_high(self.low_address_byte, self.high_address_byte);
+            op(self, value);
             self.sub_tick = 1;
             return Ok(());
         }
         Err(format!("Illegal sub_tick {} for opcode {:#04x}", self.sub_tick, opcode))
     }
 
-    fn lda(&mut self) {
-        self.cpu.a = self.memory.get_from_low_high(self.low_address_byte, self.high_address_byte);
+    fn immediate_addressing(&mut self, op: fn(&mut Emulator, u8), opcode: u8) -> Result<(), String> {
+        if self.sub_tick == 2 {
+            let value = self.memory.get_from_pc(self.cpu.get_and_increment_pc());
+            op(self, value);
+            self.sub_tick = 1;
+            return Ok(());
+        }
+        Err(format!("Illegal sub_tick {} for opcode {:#04x}", self.sub_tick, opcode))
     }
 
-    fn ldx(&mut self) {
-        self.cpu.x = self.memory.get_from_low_high(self.low_address_byte, self.high_address_byte);
+    fn lda(&mut self, value: u8) {
+        self.cpu.a = value;
     }
 
-    fn ldy(&mut self) {
-        self.cpu.y = self.memory.get_from_low_high(self.low_address_byte, self.high_address_byte);
+    fn ldx(&mut self, value: u8) {
+        self.cpu.x = value;
+    }
+
+    fn ldy(&mut self, value: u8) {
+        self.cpu.y = value;
     }
 }

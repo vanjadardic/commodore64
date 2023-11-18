@@ -43,7 +43,6 @@ pub fn main() -> Result<(), String> {
     // let vec = fs::read(f_name)
     //     .map_err(|e| format!("Error loading file '{}': {}", f_name, e.to_string()))?;
     let mut emulator = Emulator::new();
-    emulator.load();
 
     canvas.present();
     let mut event_pump = sdl_context.event_pump()?;
