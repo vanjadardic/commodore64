@@ -37,4 +37,8 @@ impl Memory {
     pub fn get_from_low_high(&mut self, low: u8, high: u8) -> u8 {
         self.get((((low as u16) & 0x00FF) | (((high as u16) << 8) & 0xFF00)) as usize)
     }
+
+    pub fn set_stack(&mut self, sp: u8, value: u8) {
+        self.data[0x0100 + (sp as usize)] = value;
+    }
 }
