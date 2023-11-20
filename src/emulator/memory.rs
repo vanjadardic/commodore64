@@ -30,8 +30,16 @@ impl Memory {
         self.data[loc]
     }
 
-    pub fn get_from_pc(&self, pc: u16) -> u8 {
-        self.get(pc as usize)
+    fn set(&mut self, loc: usize, value: u8) {
+        self.data[loc] = value;
+    }
+
+    pub fn set_from_low_high(&mut self, low: u8, high: u8, value: u8) {
+        self.set((((low as u16) & 0x00FF) | (((high as u16) << 8) & 0xFF00)) as usize, value);
+    }
+
+    pub fn get_from_word(&self, loc: u16) -> u8 {
+        self.get(loc as usize)
     }
 
     pub fn get_from_low_high(&mut self, low: u8, high: u8) -> u8 {
@@ -40,5 +48,9 @@ impl Memory {
 
     pub fn set_stack(&mut self, sp: u8, value: u8) {
         self.data[0x0100 + (sp as usize)] = value;
+    }
+
+    pub fn get_stack(&mut self, sp: u8) -> u8 {
+        self.data[0x0100 + (sp as usize)]
     }
 }

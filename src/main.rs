@@ -1,6 +1,7 @@
 use std::time::SystemTime;
+use env_logger::Env;
 
-use log::info;
+use log::{debug, error, info, trace, warn};
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::PixelFormatEnum;
@@ -15,8 +16,12 @@ const SCREEN_HEIGHT: u32 = 200;
 mod emulator;
 
 pub fn main() -> Result<(), String> {
-    env_logger::init();
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+    // error!("starting up");
+    // warn!("starting up");
     info!("starting up");
+    // debug!("starting up");
+    // trace!("starting up");
 
     let sdl_context = sdl2::init()?;
     let video_subsystem = sdl_context.video()?;
