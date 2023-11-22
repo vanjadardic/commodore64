@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use crate::emulator::cpu::{Cpu};
+use crate::emulator::cpu::Cpu;
 use crate::emulator::cpu_logger::CpuLogger;
 use crate::emulator::memory::Memory;
 
@@ -28,6 +28,7 @@ pub struct Emulator {
     high: u8,
     fix_high: bool,
     cpu_logger: CpuLogger,
+    latch: u8,
 }
 
 impl Emulator {
@@ -47,6 +48,7 @@ impl Emulator {
             high: 0,
             fix_high: false,
             cpu_logger: CpuLogger::new(),
+            latch: 0,
         }
     }
 
@@ -148,6 +150,32 @@ impl Emulator {
                 }
                 Err(format!("Illegal sub_tick {} for opcode {:02X}", self.sub_tick, x))
             }
+            x @ 0x6C => {
+                if self.sub_tick == 2 {
+                    self.low = self.memory.get_from_word(self.cpu.get_and_increment_pc());
+                    self.cpu_logger.op(self.low);
+                    self.sub_tick += 1;
+                    return Ok(());
+                }
+                if self.sub_tick == 3 {
+                    self.high = self.memory.get_from_word(self.cpu.get_and_increment_pc());
+                    self.cpu_logger.op(self.high);
+                    self.sub_tick += 1;
+                    return Ok(());
+                }
+                if self.sub_tick == 4 {
+                    self.latch = self.memory.get_from_low_high(self.low, self.high);
+                    self.sub_tick += 1;
+                    return Ok(());
+                }
+                if self.sub_tick == 5 {
+                    self.cpu.set_pc(self.latch, self.memory.get_from_low_high(self.low.wrapping_add(1), self.high));
+                    self.cpu_logger.inst("JMP");
+                    self.sub_tick = 1;
+                    return Ok(());
+                }
+                Err(format!("Illegal sub_tick {} for opcode {:02X}", self.sub_tick, x))
+            }
             x @ 0x78 => self.implied_addressing(Emulator::sei, x),
             x @ 0x85 => self.zero_page_addressing_write(Emulator::sta, x),
             x @ 0x8D => self.absolute_addressing_write(Emulator::sta, x),
@@ -159,7 +187,7 @@ impl Emulator {
             x @ 0xA9 => self.immediate_addressing(Emulator::lda, x),
             x @ 0xAA => self.implied_addressing(Emulator::tax, x),
             x @ 0xAD => self.absolute_addressing(Emulator::lda, x),
-            //x @ 0xAE => self.absolute_addressing(Emulator::ldx, x),
+            x @ 0xAE => self.absolute_addressing(Emulator::ldx, x),
             //x @ 0xAC => self.absolute_addressing(Emulator::ldy, x),
             x @ 0xBD => self.absolute_indexed_addressing_x(Emulator::lda, x),
             x @ 0xC8 => self.implied_addressing(Emulator::iny, x),
@@ -168,6 +196,8 @@ impl Emulator {
             x @ 0xD8 => self.implied_addressing(Emulator::cld, x),
             x @ 0xD0 => self.relative_addressing(Emulator::bne, x),
             x @ 0xDD => self.absolute_indexed_addressing_x(Emulator::cmp, x),
+            x @ 0xE8 => self.implied_addressing(Emulator::inx, x),
+            x @ 0xEC => self.absolute_addressing(Emulator::cpx, x),
             x @ 0xF0 => self.relative_addressing(Emulator::beq, x),
             x => Err(format!("Illegal opcode {:02X} at {:04X}", x, self.cpu.pc - 1))
         }
@@ -359,13 +389,13 @@ impl Emulator {
     fn lda(&mut self, value: u8) {
         self.cpu_logger.inst("LDA");
         self.cpu.a = value;
-        self.cpu.set_negative_and_zero_flags(value);
+        self.cpu.set_negative_and_zero_flags(self.cpu.a);
     }
 
     fn ldx(&mut self, value: u8) {
         self.cpu_logger.inst("LDX");
         self.cpu.x = value;
-        self.cpu.set_negative_and_zero_flags(value);
+        self.cpu.set_negative_and_zero_flags(self.cpu.x);
     }
 
     fn and(&mut self, value: u8) {
@@ -374,7 +404,7 @@ impl Emulator {
         self.cpu.set_negative_and_zero_flags(self.cpu.a);
     }
 
-    fn bmi(&mut self) -> bool{
+    fn bmi(&mut self) -> bool {
         self.cpu_logger.inst("BMI");
         self.cpu.get_negative_flag()
     }
@@ -388,7 +418,7 @@ impl Emulator {
     fn ldy(&mut self, value: u8) {
         self.cpu_logger.inst("LDY");
         self.cpu.y = value;
-        self.cpu.set_negative_and_zero_flags(value);
+        self.cpu.set_negative_and_zero_flags(self.cpu.y);
     }
 
     fn sei(&mut self) {
@@ -409,13 +439,13 @@ impl Emulator {
     fn tax(&mut self) {
         self.cpu_logger.inst("TAX");
         self.cpu.x = self.cpu.a;
-        self.cpu.set_negative_and_zero_flags(self.cpu.a);
+        self.cpu.set_negative_and_zero_flags(self.cpu.x);
     }
 
     fn tay(&mut self) {
         self.cpu_logger.inst("TAY");
         self.cpu.y = self.cpu.a;
-        self.cpu.set_negative_and_zero_flags(self.cpu.a);
+        self.cpu.set_negative_and_zero_flags(self.cpu.y);
     }
 
     fn stack_push(&mut self, value: u8) {
@@ -426,6 +456,13 @@ impl Emulator {
     fn cmp(&mut self, value: u8) {
         self.cpu_logger.inst("CMP");
         let (value, overflow) = self.cpu.a.overflowing_sub(value);
+        self.cpu.set_negative_and_zero_flags(value);
+        self.cpu.set_carry_flag(overflow);
+    }
+
+    fn cpx(&mut self, value: u8) {
+        self.cpu_logger.inst("CPX");
+        let (value, overflow) = self.cpu.x.overflowing_sub(value);
         self.cpu.set_negative_and_zero_flags(value);
         self.cpu.set_carry_flag(overflow);
     }
@@ -459,6 +496,12 @@ impl Emulator {
     fn iny(&mut self) {
         self.cpu_logger.inst("INY");
         self.cpu.y = self.cpu.y.wrapping_add(1);
+        self.cpu.set_negative_and_zero_flags(self.cpu.y);
+    }
+
+    fn inx(&mut self) {
+        self.cpu_logger.inst("INX");
+        self.cpu.x = self.cpu.x.wrapping_add(1);
         self.cpu.set_negative_and_zero_flags(self.cpu.x);
     }
 }

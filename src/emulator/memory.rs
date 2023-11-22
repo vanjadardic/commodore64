@@ -13,6 +13,8 @@ impl Memory {
         };
         m.data[0x0000] = 0x2F;
         m.data[0x0001] = 0x37;
+        m.data[0x0328] = 0xED;
+        m.data[0x0329] = 0xF6;
         m
     }
 
