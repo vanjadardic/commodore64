@@ -6,6 +6,7 @@ pub struct CpuLogger {
     opcode: u8,
     operand1: Option<u8>,
     operand2: Option<u8>,
+    sp: u8,
 }
 
 #[cfg(debug_assertions)]
@@ -16,13 +17,15 @@ impl CpuLogger {
             opcode: 0,
             operand1: None,
             operand2: None,
+            sp: 0,
         }
     }
 
-    pub fn pc(&mut self, pc: u16) {
+    pub fn pc(&mut self, pc: u16, sp: u8) {
         self.pc = pc;
         self.operand1 = None;
         self.operand2 = None;
+        self.sp = sp;
     }
 
     pub fn opcode(&mut self, opcode: u8) {
@@ -39,7 +42,7 @@ impl CpuLogger {
 
     pub fn inst(&mut self, inst: &'static str) {
         let mut line = String::new();
-        line.push_str(format!("{:04X}   {:02X}", self.pc, self.opcode).as_str());
+        line.push_str(format!("(sp={:02X}){:04X}   {:02X}", self.sp, self.pc, self.opcode).as_str());
         line.push_str(match self.operand1 {
             Some(x) => format!(" {:02X}", x),
             None => "   ".to_string()
