@@ -1,7 +1,7 @@
 use std::time::SystemTime;
-use env_logger::Env;
 
-use log::{debug, error, info, trace, warn};
+use env_logger::Env;
+use log::info;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::PixelFormatEnum;

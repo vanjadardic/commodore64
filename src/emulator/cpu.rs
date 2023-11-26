@@ -7,15 +7,15 @@ pub struct Cpu {
     pub y: u8,
 }
 
-pub enum Flag {
-    N,
-    V,
-    B,
-    D,
-    I,
-    Z,
-    C,
-}
+// pub enum Flag {
+//     N,
+//     V,
+//     B,
+//     D,
+//     I,
+//     Z,
+//     C,
+// }
 
 impl Cpu {
     pub fn new() -> Cpu {
@@ -51,6 +51,7 @@ impl Cpu {
     pub fn set_decimal_mode_flag(&mut self, value: bool) {
         if value { self.p |= 0x08; } else { self.p &= !0x08; }
     }
+
     pub fn set_carry_flag(&mut self, value: bool) {
         if value { self.p |= 0x01; } else { self.p &= !0x01; }
     }

@@ -1,4 +1,5 @@
 use log::debug;
+use crate::emulator::cpu::Cpu;
 
 #[cfg(debug_assertions)]
 pub struct CpuLogger {
@@ -14,25 +15,25 @@ impl CpuLogger {
     pub fn new() -> CpuLogger {
         CpuLogger {
             pc: 0,
+            sp: 0,
             opcode: 0,
             operand1: None,
             operand2: None,
-            sp: 0,
         }
     }
 
-    pub fn pc(&mut self, pc: u16, sp: u8) {
-        self.pc = pc;
+    pub fn init(&mut self, cpu:&Cpu) {
+        self.pc = cpu.pc;
+        self.sp = cpu.sp;
         self.operand1 = None;
         self.operand2 = None;
-        self.sp = sp;
     }
 
     pub fn opcode(&mut self, opcode: u8) {
         self.opcode = opcode;
     }
 
-    pub fn op(&mut self, op: u8) {
+    pub fn operand(&mut self, op: u8) {
         if self.operand1 == None {
             self.operand1 = Some(op);
         } else {
@@ -40,9 +41,9 @@ impl CpuLogger {
         }
     }
 
-    pub fn inst(&mut self, inst: &'static str) {
+    pub fn instruction(&mut self, inst: &'static str) {
         let mut line = String::new();
-        line.push_str(format!("(sp={:02X}){:04X}   {:02X}", self.sp, self.pc, self.opcode).as_str());
+        line.push_str(format!("{:04X}   {:02X}", self.pc, self.opcode).as_str());
         line.push_str(match self.operand1 {
             Some(x) => format!(" {:02X}", x),
             None => "   ".to_string()
