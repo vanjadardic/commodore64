@@ -48,6 +48,10 @@ impl Cpu {
         if value { self.p |= 0x04; } else { self.p &= !0x04; }
     }
 
+    pub fn get_decimal_mode_flag(&mut self) -> bool {
+        (self.p & 0x08) > 0
+    }
+
     pub fn set_decimal_mode_flag(&mut self, value: bool) {
         if value { self.p |= 0x08; } else { self.p &= !0x08; }
     }
@@ -56,8 +60,16 @@ impl Cpu {
         if value { self.p |= 0x01; } else { self.p &= !0x01; }
     }
 
+    pub fn set_overflow_flag(&mut self, value: bool) {
+        if value { self.p |= 0x40; } else { self.p &= !0x40; }
+    }
+
     pub fn get_zero_flag(&self) -> bool {
         (self.p & 0x02) > 0
+    }
+
+    pub fn get_carry_flag(&self) -> bool {
+        (self.p & 0x01) > 0
     }
 
     pub fn get_negative_flag(&self) -> bool {
@@ -106,5 +118,13 @@ impl Cpu {
 
     pub fn get_pcl(&self) -> u8 {
         self.pc as u8
+    }
+
+    pub fn set_pch(&mut self, value: u8) {
+        self.pc = (self.pc & 0x00FF) | (((value as u16) << 8) & 0xFF00);
+    }
+
+    pub fn set_pcl(&mut self, value: u8) {
+        self.pc = ((value as u16) & 0x00FF) | (self.pc & 0xFF00);
     }
 }

@@ -33,7 +33,19 @@ impl Memory {
     }
 
     fn set(&mut self, loc: usize, value: u8) {
+        // if loc == 0x0001 {
+        //     let a = loc;
+        //println!("set mem {:04X}={}", loc, value);
+        // }
         self.data[loc] = value;
+    }
+
+    pub fn set_from_low(&mut self, low: u8, value: u8) {
+        self.set(low as usize, value);
+    }
+
+    pub fn get_from_low(&mut self, low: u8)->u8 {
+        self.get(low as usize)
     }
 
     pub fn set_from_low_high(&mut self, low: u8, high: u8, value: u8) {
