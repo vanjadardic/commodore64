@@ -13,8 +13,8 @@ impl Memory {
         };
         m.data[0x0000] = 0x2F;
         m.data[0x0001] = 0x37;
-        m.data[0x0328] = 0xED;
-        m.data[0x0329] = 0xF6;
+        // m.data[0x0328] = 0xED;
+        // m.data[0x0329] = 0xF6;
         m
     }
 
@@ -25,10 +25,14 @@ impl Memory {
         if loc >= 0xE000 && loc <= 0xFFFF && (self.data[0x0001] & 0x02) == 0x02 {
             return KERNAL[loc - 0xE000];
         }
-        if loc >= 0xD000 && loc <= 0xDFFF && (self.data[0x0001] & 0x04) == 0x00 && (self.data[0x0001] & 0x03) != 0x00 {
-            return CHARACTERS[loc - 0xD000];
+        if loc >= 0xD000 && loc <= 0xDFFF && (self.data[0x0001] & 0x03) != 0x00 {
+            if (self.data[0x0001] & 0x04) == 0x00 {
+                return CHARACTERS[loc - 0xD000];
+            } else {
+                // todo IO area
+                return self.data[loc];
+            }
         }
-        // todo IO area
         self.data[loc]
     }
 
@@ -44,7 +48,7 @@ impl Memory {
         self.set(low as usize, value);
     }
 
-    pub fn get_from_low(&mut self, low: u8)->u8 {
+    pub fn get_from_low(&mut self, low: u8) -> u8 {
         self.get(low as usize)
     }
 

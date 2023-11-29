@@ -68,6 +68,9 @@ impl Emulator {
             //     println!()
             // }
             let pc = self.cpu.get_and_increment_pc();
+            // if pc == 0xFF5E {
+            //     println!();
+            // }
             self.opcode = self.memory.get_from_word(pc);
             self.cpu_logger.opcode(self.opcode);
             self.sub_tick += 1;
@@ -75,6 +78,7 @@ impl Emulator {
         }
         match self.opcode {
             x @ 0x09 => self.immediate_addressing(Emulator::ora, x),
+            x @ 0x0D => self.absolute_addressing_read(Emulator::ora, x),
             x @ 0x10 => self.relative_addressing(Emulator::bpl, x),
             x @ 0x18 => self.implied_addressing(Emulator::clc, x),
             x @ 0x20 => { //absolute addressing
@@ -248,6 +252,7 @@ impl Emulator {
             x @ 0x90 => self.relative_addressing(Emulator::bcc, x),
             x @ 0x91 => self.indirect_indexed_addressing_write(Emulator::sta, x),
             x @ 0x94 => self.zero_page_indexed_addressing_write_x(Emulator::sty, x),
+            x @ 0x95 => self.zero_page_indexed_addressing_write_x(Emulator::sta, x),
             x @ 0x98 => self.implied_addressing(Emulator::tya, x),
             x @ 0x99 => self.absolute_indexed_addressing_write_y(Emulator::sta, x),
             x @ 0x9A => self.implied_addressing(Emulator::txs, x),
@@ -256,6 +261,7 @@ impl Emulator {
             x @ 0xA2 => self.immediate_addressing(Emulator::ldx, x),
             x @ 0xA4 => self.zero_page_addressing_read(Emulator::ldy, x),
             x @ 0xA5 => self.zero_page_addressing_read(Emulator::lda, x),
+            x @ 0xA6 => self.zero_page_addressing_read(Emulator::ldx, x),
             x @ 0xA8 => self.implied_addressing(Emulator::tay, x),
             x @ 0xA9 => self.immediate_addressing(Emulator::lda, x),
             x @ 0xAA => self.implied_addressing(Emulator::tax, x),
@@ -263,6 +269,8 @@ impl Emulator {
             x @ 0xAE => self.absolute_addressing_read(Emulator::ldx, x),
             x @ 0xB0 => self.relative_addressing(Emulator::bcs, x),
             x @ 0xB1 => self.indirect_indexed_addressing_read(Emulator::lda, x),
+            x @ 0xB4 => self.zero_page_indexed_addressing_read_x(Emulator::ldy, x),
+            x @ 0xB5 => self.zero_page_indexed_addressing_read_x(Emulator::lda, x),
             x @ 0xB9 => self.absolute_indexed_addressing_read_y(Emulator::lda, x),
             x @ 0xBD => self.absolute_indexed_addressing_read_x(Emulator::lda, x),
             x @ 0xC8 => self.implied_addressing(Emulator::iny, x),
@@ -406,6 +414,10 @@ impl Emulator {
             return Ok(());
         }
         Err(format!("Illegal sub_tick {} for opcode {:02X}", self.sub_tick, opcode))
+    }
+
+    fn zero_page_indexed_addressing_read_x(&mut self, op: fn(&mut Emulator, u8), opcode: u8) -> Result<(), String> {
+        self.zero_page_indexed_addressing_read(op, self.cpu.x, opcode)
     }
 
     fn zero_page_indexed_addressing_read_y(&mut self, op: fn(&mut Emulator, u8), opcode: u8) -> Result<(), String> {
@@ -714,8 +726,8 @@ impl Emulator {
     fn adc(&mut self, value: u8) {
         self.cpu_logger.instruction("ADC");
         if self.cpu.get_decimal_mode_flag() {
-            let a = (self.cpu.a & 0x0F) % 10 + (((self.cpu.a >> 4) & 0x0F) % 10)*10;
-            let value = (value & 0x0F) % 10 + (((value >> 4) & 0x0F) % 10)*10;
+            let a = (self.cpu.a & 0x0F) % 10 + (((self.cpu.a >> 4) & 0x0F) % 10) * 10;
+            let value = (value & 0x0F) % 10 + (((value >> 4) & 0x0F) % 10) * 10;
             let newa = a + value + (self.cpu.get_carry_flag() as u8);
             self.cpu.set_carry_flag(newa > 99);
             let newa = newa % 100;
