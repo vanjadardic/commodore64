@@ -48,7 +48,7 @@ impl Memory {
         self.set(low as usize, value);
     }
 
-    pub fn get_from_low(&mut self, low: u8) -> u8 {
+    pub fn get_from_low(&self, low: u8) -> u8 {
         self.get(low as usize)
     }
 
@@ -60,7 +60,7 @@ impl Memory {
         self.get(loc as usize)
     }
 
-    pub fn get_from_low_high(&mut self, low: u8, high: u8) -> u8 {
+    pub fn get_from_low_high(&self, low: u8, high: u8) -> u8 {
         self.get((((low as u16) & 0x00FF) | (((high as u16) << 8) & 0xFF00)) as usize)
     }
 
@@ -68,7 +68,7 @@ impl Memory {
         self.data[0x0100 + (sp as usize)] = value;
     }
 
-    pub fn get_stack(&mut self, sp: u8) -> u8 {
+    pub fn get_stack(&self, sp: u8) -> u8 {
         self.data[0x0100 + (sp as usize)]
     }
 }
