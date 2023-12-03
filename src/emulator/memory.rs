@@ -1,20 +1,22 @@
+use crate::emulator::gpu::Gpu;
+
 const BASIC: &[u8] = include_bytes!("basic.901226-01.bin");
 const KERNAL: &[u8] = include_bytes!("kernal.901227-03.bin");
 const CHARACTERS: &[u8] = include_bytes!("characters.901225-01.bin");
 
 pub struct Memory {
     data: [u8; 0xFFFF],
+    pub gpu: Gpu,
 }
 
 impl Memory {
     pub fn new() -> Memory {
         let mut m = Memory {
-            data: [0; 0xFFFF]
+            data: [0; 0xFFFF],
+            gpu: Gpu::new(),
         };
         m.data[0x0000] = 0x2F;
         m.data[0x0001] = 0x37;
-        // m.data[0x0328] = 0xED;
-        // m.data[0x0329] = 0xF6;
         m
     }
 
@@ -28,15 +30,23 @@ impl Memory {
         if loc >= 0xD000 && loc <= 0xDFFF && (self.data[0x0001] & 0x03) != 0x00 {
             if (self.data[0x0001] & 0x04) == 0x00 {
                 return CHARACTERS[loc - 0xD000];
-            } else {
-                // todo IO area
-                return self.data[loc];
+            }
+            if loc >= 0xD000 && loc <= 0xD3FF {
+                return self.gpu.get(((loc - 0xD000) % 64) + 0xD000);
             }
         }
         self.data[loc]
     }
 
     fn set(&mut self, loc: usize, value: u8) {
+        if loc >= 0xD000 && loc <= 0xDFFF && (self.data[0x0001] & 0x03) != 0x00 {
+            if (self.data[0x0001] & 0x04) != 0x00 {
+                if loc >= 0xD000 && loc <= 0xD3FF {
+                    self.gpu.set(((loc - 0xD000) % 64) + 0xD000, value);
+                    return;
+                }
+            }
+        }
         // if loc == 0x0001 {
         //     let a = loc;
         //println!("set mem {:04X}={}", loc, value);
@@ -65,10 +75,10 @@ impl Memory {
     }
 
     pub fn set_stack(&mut self, sp: u8, value: u8) {
-        self.data[0x0100 + (sp as usize)] = value;
+        self.set_from_low_high(sp, 0x01, value);
     }
 
     pub fn get_stack(&self, sp: u8) -> u8 {
-        self.data[0x0100 + (sp as usize)]
+        self.get_from_low_high(sp, 0x01)
     }
 }

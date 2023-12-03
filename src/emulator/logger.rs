@@ -60,33 +60,33 @@ impl CpuLogger {
             None => "   ".to_string()
         }.as_str());
         line.push_str(format!("   {} {}", cpu.inst, addressing.description()).as_str());
-        if self.pc == 0xFD50 { //initialise memory pointers
+        if self.pc == 0xFD50 {
             self.disabled = true;
-            self.disabled_until = 0xFD9A;
-            debug!("{:04X} . {:04X} skip '{}'", self.pc,self.disabled_until ,"initialise memory pointers");
+            self.disabled_until = 0xFCF8;
+            debug!("{:04X} . {:04X} skip '{}'", self.pc, self.disabled_until, "initialise memory pointers");
         }
-        if self.pc == 0xFD1A { //set I/O vectors depending on XY
+        if self.pc == 0xFD15 {
             self.disabled = true;
-            self.disabled_until = 0xFD2F;
-            debug!("{:04X} . {:04X} skip '{}'", self.pc,self.disabled_until ,"set I/O vectors depending on XY");
+            self.disabled_until = 0xFCFB;
+            debug!("{:04X} . {:04X} skip '{}'", self.pc, self.disabled_until, "restore I/O vectors");
         }
-        if self.pc == 0xE518 { //initialise screen and keyboard
+        if self.pc == 0xFF5B {
             self.disabled = true;
-            self.disabled_until = 0xE598;
-            debug!("{:04X} . {:04X} skip '{}'", self.pc,self.disabled_until ,"initialise screen and keyboard");
+            self.disabled_until = 0xFCFE;
+            debug!("{:04X} . {:04X} skip '{}'", self.pc, self.disabled_until, "initialise screen and keyboard");
         }
         // if self.pc == 0xFF5E { //some loop
         //     self.disabled = true;
         //     self.disabled_until = 0xFF61;
         // }
 
-        if !self.disabled {
-            debug!("{}", line);
-        }
-
         if self.disabled && self.pc == self.disabled_until {
             self.disabled = false;
             debug!("            end skip");
+        }
+
+        if !self.disabled {
+            debug!("{}", line);
         }
     }
 }
