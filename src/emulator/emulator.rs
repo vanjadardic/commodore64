@@ -60,21 +60,28 @@ impl Emulator {
         if self.sub_tick == 1 {
             self.cpu_logger.init(self.tick_count, &self.cpu);
             let pc = self.cpu.get_and_increment_pc();
+            // if pc == 0xFD25 {
+            //     println!();
+            // }
             self.opcode = self.memory.get_from_word(pc);
             self.cpu_logger.opcode(self.opcode);
             self.sub_tick += 1;
             return Ok(());
         }
         self.sub_tick = match self.opcode {
+            x @ 0x05 => self.addressing.zero_page_read(self.sub_tick, &mut self.cpu, &self.memory, Cpu::ora, x),
             x @ 0x09 => self.addressing.immediate(self.sub_tick, &mut self.cpu, &self.memory, Cpu::ora, x),
+            x @ 0x0A => self.addressing.accumulator(self.sub_tick, &mut self.cpu, Cpu::asl, x),
             x @ 0x0D => self.addressing.absolute_read(self.sub_tick, &mut self.cpu, &self.memory, Cpu::ora, x),
             x @ 0x10 => self.addressing.relative(self.sub_tick, &mut self.cpu, &self.memory, Cpu::bpl, x),
             x @ 0x18 => self.addressing.implied(self.sub_tick, &mut self.cpu, Cpu::clc, x),
             x @ 0x20 => self.addressing.absolute_jsr(self.sub_tick, &mut self.cpu, &mut self.memory, x),
+            x @ 0x24 => self.addressing.zero_page_read(self.sub_tick, &mut self.cpu, &self.memory, Cpu::bit, x),
             x @ 0x29 => self.addressing.immediate(self.sub_tick, &mut self.cpu, &self.memory, Cpu::and, x),
             x @ 0x2A => self.addressing.accumulator(self.sub_tick, &mut self.cpu, Cpu::rol, x),
             x @ 0x2D => self.addressing.absolute_read(self.sub_tick, &mut self.cpu, &self.memory, Cpu::and, x),
             x @ 0x30 => self.addressing.relative(self.sub_tick, &mut self.cpu, &self.memory, Cpu::bmi, x),
+            x @ 0x38 => self.addressing.implied(self.sub_tick, &mut self.cpu, Cpu::sec, x),
             // x @ 0x40 => { //implied/stack
             //     if self.sub_tick == 2 {
             //         self.sub_tick += 1;
@@ -105,54 +112,13 @@ impl Emulator {
             //     }
             //     Err(format!("Illegal sub_tick {} for opcode {:02X}", self.sub_tick, x))
             // }
+            x @ 0x48 => self.addressing.implied_pha(self.sub_tick, &mut self.cpu, &mut self.memory, x),
             x @ 0x4C => self.addressing.absolute_jmp(self.sub_tick, &mut self.cpu, &self.memory, x),
+            x @ 0x58 => self.addressing.implied(self.sub_tick, &mut self.cpu, Cpu::cli, x),
             x @ 0x60 => self.addressing.implied_rts(self.sub_tick, &mut self.cpu, &self.memory, x),
-            // x @ 0x68 => { //implied/stack
-            //     if self.sub_tick == 2 {
-            //         self.sub_tick += 1;
-            //         return Ok(());
-            //     }
-            //     if self.sub_tick == 3 {
-            //         self.cpu.sp = self.cpu.sp.wrapping_add(1);
-            //         self.sub_tick += 1;
-            //         return Ok(());
-            //     }
-            //     if self.sub_tick == 4 {
-            //         self.cpu.a = self.memory.get_stack(self.cpu.sp);
-            //         self.cpu.set_negative_and_zero_flags(self.cpu.a);
-            //         self.cpu_logger.borrow_mut().instruction("PLA");
-            //         self.sub_tick = 1;
-            //         return Ok(());
-            //     }
-            //     Err(format!("Illegal sub_tick {} for opcode {:02X}", self.sub_tick, x))
-            // }
+            x @ 0x68 => self.addressing.implied_pla(self.sub_tick, &mut self.cpu, &self.memory, x),
             x @ 0x69 => self.addressing.immediate(self.sub_tick, &mut self.cpu, &self.memory, Cpu::adc, x),
-            // x @ 0x6C => { //absolute indirect
-            //     if self.sub_tick == 2 {
-            //         self.low = self.memory.get_from_word(self.cpu.get_and_increment_pc());
-            //         self.cpu_logger.borrow_mut().operand(self.low);
-            //         self.sub_tick += 1;
-            //         return Ok(());
-            //     }
-            //     if self.sub_tick == 3 {
-            //         self.high = self.memory.get_from_word(self.cpu.get_and_increment_pc());
-            //         self.cpu_logger.borrow_mut().operand(self.high);
-            //         self.sub_tick += 1;
-            //         return Ok(());
-            //     }
-            //     if self.sub_tick == 4 {
-            //         self.latch = self.memory.get_from_low_high(self.low, self.high);
-            //         self.sub_tick += 1;
-            //         return Ok(());
-            //     }
-            //     if self.sub_tick == 5 {
-            //         self.cpu.set_pc(self.latch, self.memory.get_from_low_high(self.low.wrapping_add(1), self.high));
-            //         self.cpu_logger.borrow_mut().instruction("JMP");
-            //         self.sub_tick = 1;
-            //         return Ok(());
-            //     }
-            //     Err(format!("Illegal sub_tick {} for opcode {:02X}", self.sub_tick, x))
-            // }
+            x @ 0x6C => self.addressing.absolute_indirect_jmp(self.sub_tick, &mut self.cpu, &self.memory, x),
             x @ 0x78 => self.addressing.implied(self.sub_tick, &mut self.cpu, Cpu::sei, x),
             x @ 0x84 => self.addressing.zero_page_write(self.sub_tick, &mut self.cpu, &mut self.memory, Cpu::sty, x),
             x @ 0x85 => self.addressing.zero_page_write(self.sub_tick, &mut self.cpu, &mut self.memory, Cpu::sta, x),
@@ -178,6 +144,7 @@ impl Emulator {
             x @ 0xA8 => self.addressing.implied(self.sub_tick, &mut self.cpu, Cpu::tay, x),
             x @ 0xA9 => self.addressing.immediate(self.sub_tick, &mut self.cpu, &self.memory, Cpu::lda, x),
             x @ 0xAA => self.addressing.implied(self.sub_tick, &mut self.cpu, Cpu::tax, x),
+            x @ 0xAC => self.addressing.absolute_read(self.sub_tick, &mut self.cpu, &self.memory, Cpu::ldy, x),
             x @ 0xAD => self.addressing.absolute_read(self.sub_tick, &mut self.cpu, &self.memory, Cpu::lda, x),
             x @ 0xAE => self.addressing.absolute_read(self.sub_tick, &mut self.cpu, &self.memory, Cpu::ldx, x),
             x @ 0xB0 => self.addressing.relative(self.sub_tick, &mut self.cpu, &self.memory, Cpu::bcs, x),
@@ -186,6 +153,8 @@ impl Emulator {
             x @ 0xB5 => self.addressing.zero_page_indexed_read_x(self.sub_tick, &mut self.cpu, &self.memory, Cpu::lda, x),
             x @ 0xB9 => self.addressing.absolute_indexed_read_y(self.sub_tick, &mut self.cpu, &self.memory, Cpu::lda, x),
             x @ 0xBD => self.addressing.absolute_indexed_read_x(self.sub_tick, &mut self.cpu, &self.memory, Cpu::lda, x),
+            x @ 0xC4 => self.addressing.zero_page_read(self.sub_tick, &mut self.cpu, &self.memory, Cpu::cpy, x),
+            x @ 0xC5 => self.addressing.zero_page_read(self.sub_tick, &mut self.cpu, &self.memory, Cpu::cmp, x),
             x @ 0xC8 => self.addressing.implied(self.sub_tick, &mut self.cpu, Cpu::iny, x),
             x @ 0xC9 => self.addressing.immediate(self.sub_tick, &mut self.cpu, &self.memory, Cpu::cmp, x),
             x @ 0xCA => self.addressing.implied(self.sub_tick, &mut self.cpu, Cpu::dex, x),
@@ -195,6 +164,7 @@ impl Emulator {
             x @ 0xD8 => self.addressing.implied(self.sub_tick, &mut self.cpu, Cpu::cld, x),
             x @ 0xDD => self.addressing.absolute_indexed_read_x(self.sub_tick, &mut self.cpu, &self.memory, Cpu::cmp, x),
             x @ 0xE0 => self.addressing.immediate(self.sub_tick, &mut self.cpu, &self.memory, Cpu::cpx, x),
+            x @ 0xE4 => self.addressing.zero_page_read(self.sub_tick, &mut self.cpu, &self.memory, Cpu::cpx, x),
             x @ 0xE6 => self.addressing.zero_page_read_modify_write(self.sub_tick, &mut self.cpu, &mut self.memory, Cpu::inc, x),
             x @ 0xE8 => self.addressing.implied(self.sub_tick, &mut self.cpu, Cpu::inx, x),
             x @ 0xEC => self.addressing.absolute_read(self.sub_tick, &mut self.cpu, &self.memory, Cpu::cpx, x),

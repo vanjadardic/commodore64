@@ -1,3 +1,5 @@
+use log::debug;
+
 use crate::emulator::gpu::Gpu;
 
 const BASIC: &[u8] = include_bytes!("basic.901226-01.bin");
@@ -34,6 +36,19 @@ impl Memory {
             if loc >= 0xD000 && loc <= 0xD3FF {
                 return self.gpu.get(((loc - 0xD000) % 64) + 0xD000);
             }
+            if loc >= 0xD400 && loc <= 0xD7FF {
+                debug!("SID get {:04X}", loc);
+            } else if loc >= 0xD800 && loc <= 0xDBFF {
+                debug!("Color RAM get {:04X}", loc);
+            } else if loc >= 0xDC00 && loc <= 0xDCFF {
+                debug!("CIA #1 get {:04X}", loc);
+            } else if loc >= 0xDD00 && loc <= 0xDDFF {
+                debug!("CIA #2 get {:04X}", loc);
+            } else if loc >= 0xDE00 && loc <= 0xDEFF {
+                debug!("I/O Area #1 get {:04X}", loc);
+            } else if loc >= 0xDF00 && loc <= 0xDFFF {
+                debug!("I/O Area #2 get {:04X}", loc);
+            }
         }
         self.data[loc]
     }
@@ -45,12 +60,28 @@ impl Memory {
                     self.gpu.set(((loc - 0xD000) % 64) + 0xD000, value);
                     return;
                 }
+                if loc >= 0xD400 && loc <= 0xD7FF {
+                    debug!("SID get {:04X} = {:02X}", loc, value);
+                } else if loc >= 0xD800 && loc <= 0xDBFF {
+                    debug!("Color RAM set {:04X} = {:02X}", loc, value);
+                } else if loc >= 0xDC00 && loc <= 0xDCFF {
+                    debug!("CIA #1 set {:04X} = {:02X}", loc, value);
+                } else if loc >= 0xDD00 && loc <= 0xDDFF {
+                    debug!("CIA #2 set {:04X} = {:02X}", loc, value);
+                } else if loc >= 0xDE00 && loc <= 0xDEFF {
+                    debug!("I/O Area #1 set {:04X} = {:02X}", loc, value);
+                } else if loc >= 0xDF00 && loc <= 0xDFFF {
+                    debug!("I/O Area #2 set {:04X} = {:02X}", loc, value);
+                }
             }
         }
         // if loc == 0x0001 {
         //     let a = loc;
         //println!("set mem {:04X}={}", loc, value);
         // }
+        if loc == 0x0322 || loc == 0x0323 {
+            debug!("memset {:04X} = {:02X}", loc, value);
+        }
         self.data[loc] = value;
     }
 

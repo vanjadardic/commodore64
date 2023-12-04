@@ -46,6 +46,10 @@ impl Cpu {
         if value == 0 { self.p |= 0x02; } else { self.p &= !0x02; }
     }
 
+    pub fn set_zero_flag(&mut self, value: bool) {
+        if value { self.p |= 0x02; } else { self.p &= !0x02; }
+    }
+
     pub fn set_interrupt_flag(&mut self, value: bool) {
         if value { self.p |= 0x04; } else { self.p &= !0x04; }
     }
@@ -171,9 +175,20 @@ impl Cpu {
         self.set_negative_and_zero_flags(self.a);
     }
 
+    pub fn bit(&mut self, value: u8) {
+        self.inst = "BIT";
+        self.p |= (self.p & !0xC0) | (value & 0xC0);
+        self.set_zero_flag((self.a & value) == 0);
+    }
+
     pub fn clc(&mut self) {
         self.inst = "CLC";
         self.set_carry_flag(false);
+    }
+
+    pub fn sec(&mut self) {
+        self.inst = "SEC";
+        self.set_carry_flag(true);
     }
 
     pub fn ldy(&mut self, value: u8) {
@@ -210,6 +225,11 @@ impl Cpu {
         self.set_interrupt_flag(true);
     }
 
+    pub fn cli(&mut self) {
+        self.inst = "CLI";
+        self.set_interrupt_flag(false);
+    }
+
     pub fn cld(&mut self) {
         self.inst = "CLD";
         self.set_decimal_mode_flag(false);
@@ -217,6 +237,17 @@ impl Cpu {
 
     pub fn rol(&mut self, value: u8) -> u8 {
         self.inst = "ROL";
+        let (mut value, carry) = value.overflowing_shl(1);
+        if self.get_carry_flag() {
+            value |= 0x01;
+        }
+        self.set_negative_and_zero_flags(value);
+        self.set_carry_flag(carry);
+        value
+    }
+
+    pub fn asl(&mut self, value: u8) -> u8 {
+        self.inst = "ASL";
         let (value, carry) = value.overflowing_shl(1);
         self.set_negative_and_zero_flags(value);
         self.set_carry_flag(carry);
@@ -254,6 +285,13 @@ impl Cpu {
 
     pub fn cmp(&mut self, value: u8) {
         self.inst = "CMP";
+        let (value, overflow) = self.a.overflowing_sub(value);
+        self.set_negative_and_zero_flags(value);
+        self.set_carry_flag(overflow);
+    }
+
+    pub fn cpy(&mut self, value: u8) {
+        self.inst = "CPY";
         let (value, overflow) = self.a.overflowing_sub(value);
         self.set_negative_and_zero_flags(value);
         self.set_carry_flag(overflow);

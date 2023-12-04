@@ -24,6 +24,9 @@ enum AddressingType {
     // ZeroPageIndexedWriteY,
     ZeroPageIndexedReadX,
     // ZeroPageIndexedReadY,
+    AbsoluteIndirectJMP,
+    ImpliedPHA,
+    ImpliedPLA,
 }
 
 pub struct Addressing {
@@ -141,6 +144,15 @@ impl Addressing {
             // AddressingType::ZeroPageIndexedReadY => {
             //     format!("${:02X},Y", self.operand1.unwrap())
             // }
+            AddressingType::AbsoluteIndirectJMP => {
+                format!("(${:02X}{:02X})", self.operand2.unwrap(), self.operand1.unwrap())
+            }
+            AddressingType::ImpliedPHA => {
+                String::from("")
+            }
+            AddressingType::ImpliedPLA => {
+                String::from("")
+            }
         }
     }
 
@@ -430,7 +442,7 @@ impl Addressing {
         }
         if sub_tick == 4 {
             self.high = memory.get_from_low(self.latch.wrapping_add(1));
-            (self.latch, self.fix_high) = self.low.overflowing_add(cpu.y);
+            (self.low, self.fix_high) = self.low.overflowing_add(cpu.y);
             return Ok(sub_tick + 1);
         }
         if sub_tick == 5 {
@@ -461,7 +473,7 @@ impl Addressing {
         }
         if sub_tick == 4 {
             self.high = memory.get_from_low(self.latch.wrapping_add(1));
-            (self.latch, self.fix_high) = self.low.overflowing_add(cpu.y);
+            (self.low, self.fix_high) = self.low.overflowing_add(cpu.y);
             return Ok(sub_tick + 1);
         }
         if sub_tick == 5 {
@@ -558,4 +570,58 @@ impl Addressing {
     //     }
     //     self.zero_page_indexed_read(sub_tick, cpu, memory, inst, cpu.y, opcode)
     // }
+
+    pub fn absolute_indirect_jmp(&mut self, sub_tick: u8, cpu: &mut Cpu, memory: &Memory, opcode: u8) -> Result<u8, String> {
+        if sub_tick == 2 {
+            self.set_addressing_type(AddressingType::AbsoluteIndirectJMP);
+            self.low = self.read_operand(memory, cpu);
+            return Ok(sub_tick + 1);
+        }
+        if sub_tick == 3 {
+            self.high = self.read_operand(memory, cpu);
+            cpu.set_pc(self.low, self.high);
+            return Ok(sub_tick + 1);
+        }
+        if sub_tick == 4 {
+            self.latch = memory.get_from_low_high(self.low, self.high);
+            return Ok(sub_tick + 1);
+        }
+        if sub_tick == 5 {
+            cpu.set_pc(self.latch, memory.get_from_low_high(self.low.wrapping_add(1), self.high));
+            cpu.inst = "JMP";
+            return Ok(1);
+        }
+        Err(format!("Illegal sub_tick {} for opcode {:02X}", sub_tick, opcode))
+    }
+
+    pub fn implied_pha(&mut self, sub_tick: u8, cpu: &mut Cpu, memory: &mut Memory, opcode: u8) -> Result<u8, String> {
+        if sub_tick == 2 {
+            self.set_addressing_type(AddressingType::ImpliedPHA);
+            return Ok(sub_tick + 1);
+        }
+        if sub_tick == 3 {
+            memory.set_stack(cpu.sp, cpu.a);
+            cpu.sp = cpu.sp.wrapping_sub(1);
+            cpu.inst = "PHA";
+            return Ok(1);
+        }
+        Err(format!("Illegal sub_tick {} for opcode {:02X}", sub_tick, opcode))
+    }
+
+    pub fn implied_pla(&mut self, sub_tick: u8, cpu: &mut Cpu, memory: &Memory, opcode: u8) -> Result<u8, String> {
+        if sub_tick == 2 {
+            self.set_addressing_type(AddressingType::ImpliedPLA);
+            return Ok(sub_tick + 1);
+        }
+        if sub_tick == 3 {
+            cpu.sp = cpu.sp.wrapping_add(1);
+            return Ok(sub_tick + 1);
+        }
+        if sub_tick == 4 {
+            cpu.a = memory.get_stack(cpu.sp);
+            cpu.inst = "PLA";
+            return Ok(1);
+        }
+        Err(format!("Illegal sub_tick {} for opcode {:02X}", sub_tick, opcode))
+    }
 }
