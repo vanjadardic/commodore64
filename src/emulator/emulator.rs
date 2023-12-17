@@ -60,7 +60,7 @@ impl Emulator {
         if self.sub_tick == 1 {
             self.cpu_logger.init(self.tick_count, &self.cpu);
             let pc = self.cpu.get_and_increment_pc();
-            // if pc == 0xFD25 {
+            // if pc == 0xA408 {
             //     println!();
             // }
             self.opcode = self.memory.get_from_word(pc);
@@ -116,6 +116,7 @@ impl Emulator {
             x @ 0x4C => self.addressing.absolute_jmp(self.sub_tick, &mut self.cpu, &self.memory, x),
             x @ 0x58 => self.addressing.implied(self.sub_tick, &mut self.cpu, Cpu::cli, x),
             x @ 0x60 => self.addressing.implied_rts(self.sub_tick, &mut self.cpu, &self.memory, x),
+            x @ 0x65 => self.addressing.zero_page_read(self.sub_tick, &mut self.cpu, &self.memory, Cpu::adc, x),
             x @ 0x68 => self.addressing.implied_pla(self.sub_tick, &mut self.cpu, &self.memory, x),
             x @ 0x69 => self.addressing.immediate(self.sub_tick, &mut self.cpu, &self.memory, Cpu::adc, x),
             x @ 0x6C => self.addressing.absolute_indirect_jmp(self.sub_tick, &mut self.cpu, &self.memory, x),

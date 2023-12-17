@@ -287,21 +287,21 @@ impl Cpu {
         self.inst = "CMP";
         let (value, overflow) = self.a.overflowing_sub(value);
         self.set_negative_and_zero_flags(value);
-        self.set_carry_flag(overflow);
+        self.set_carry_flag(!overflow);
     }
 
     pub fn cpy(&mut self, value: u8) {
         self.inst = "CPY";
-        let (value, overflow) = self.a.overflowing_sub(value);
+        let (value, overflow) = self.y.overflowing_sub(value);
         self.set_negative_and_zero_flags(value);
-        self.set_carry_flag(overflow);
+        self.set_carry_flag(!overflow);
     }
 
     pub fn cpx(&mut self, value: u8) {
         self.inst = "CPX";
         let (value, overflow) = self.x.overflowing_sub(value);
         self.set_negative_and_zero_flags(value);
-        self.set_carry_flag(overflow);
+        self.set_carry_flag(!overflow);
     }
 
     pub fn bne(&mut self) -> bool {

@@ -90,14 +90,6 @@ impl CpuLogger {
             }
         }
 
-        if self.pc == 0xFF5E { //some loop
-            self.disabled = true;
-            self.disabled_until = 0xFF61;
-        }
-        // if self.pc == 0xED5A { //some loop
-        //     self.disabled = true;
-        //     self.disabled_until = 0xED5F;
-        // }
 
         if self.disabled && self.pc == self.disabled_until {
             self.disabled = false;

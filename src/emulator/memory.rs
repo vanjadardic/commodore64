@@ -79,7 +79,7 @@ impl Memory {
         //     let a = loc;
         //println!("set mem {:04X}={}", loc, value);
         // }
-        if loc == 0x0322 || loc == 0x0323 {
+        if loc == 0x0283 || loc == 0x0284 || loc == 0x0033 || loc == 0x0034 {
             debug!("memset {:04X} = {:02X}", loc, value);
         }
         self.data[loc] = value;
