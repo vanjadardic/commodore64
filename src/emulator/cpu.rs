@@ -141,6 +141,13 @@ impl Cpu {
         new_value
     }
 
+    pub fn dec(&mut self, value: u8) -> u8 {
+        self.inst = "DEC";
+        let new_value = value.wrapping_sub(1);
+        self.set_negative_and_zero_flags(new_value);
+        new_value
+    }
+
     pub fn lda(&mut self, value: u8) {
         self.inst = "LDA";
         self.a = value;
@@ -197,8 +204,18 @@ impl Cpu {
         self.set_negative_and_zero_flags(self.y);
     }
 
+    pub fn eor(&mut self, value: u8) {
+        self.inst = "EOR";
+        self.a ^= value;
+        self.set_negative_and_zero_flags(value);
+    }
+
     pub fn adc(&mut self, value: u8) {
         self.inst = "ADC";
+        self._adc(value);
+    }
+
+    fn _adc(&mut self, value: u8) {
         if self.get_decimal_mode_flag() {
             let a = (self.a & 0x0F) % 10 + (((self.a >> 4) & 0x0F) % 10) * 10;
             let value = (value & 0x0F) % 10 + (((value >> 4) & 0x0F) % 10) * 10;
@@ -220,6 +237,32 @@ impl Cpu {
         }
     }
 
+    pub fn sbc(&mut self, value: u8) {
+        self.inst = "SBC";
+        self._adc(!value);
+    }
+
+    pub fn pha(&mut self) -> u8 {
+        self.inst = "PHA";
+        self.a
+    }
+
+    pub fn php(&mut self) -> u8 {
+        self.inst = "PHP";
+        self.p
+    }
+
+    pub fn pla(&mut self, value: u8) {
+        self.inst = "PLA";
+        self.a = value;
+        self.set_negative_and_zero_flags(value);
+    }
+
+    pub fn plp(&mut self, value: u8) {
+        self.inst = "PLP";
+        self.p = value;
+    }
+
     pub fn sei(&mut self) {
         self.inst = "SEI";
         self.set_interrupt_flag(true);
@@ -237,20 +280,41 @@ impl Cpu {
 
     pub fn rol(&mut self, value: u8) -> u8 {
         self.inst = "ROL";
-        let (mut value, carry) = value.overflowing_shl(1);
+        let new_carry = value & 0x80 > 0;
+        let mut value = value.wrapping_shl(1);
         if self.get_carry_flag() {
             value |= 0x01;
         }
         self.set_negative_and_zero_flags(value);
-        self.set_carry_flag(carry);
+        self.set_carry_flag(new_carry);
+        value
+    }
+
+    pub fn ror(&mut self, value: u8) -> u8 {
+        self.inst = "ROR";
+        let new_carry = value & 0x01 > 0;
+        let mut value = value.wrapping_shr(1);
+        if self.get_carry_flag() {
+            value |= 0x80;
+        }
+        self.set_negative_and_zero_flags(value);
+        self.set_carry_flag(new_carry);
+        value
+    }
+
+    pub fn lsr(&mut self, value: u8) -> u8 {
+        self.inst = "LSR";
+        self.set_carry_flag(value & 0x01 > 0);
+        let value = value.wrapping_shr(1);
+        self.set_negative_and_zero_flags(value);
         value
     }
 
     pub fn asl(&mut self, value: u8) -> u8 {
         self.inst = "ASL";
-        let (value, carry) = value.overflowing_shl(1);
+        self.set_carry_flag(value & 0x80 > 0);
+        let value = value.wrapping_shl(1);
         self.set_negative_and_zero_flags(value);
-        self.set_carry_flag(carry);
         value
     }
 

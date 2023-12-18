@@ -24,6 +24,8 @@ enum AddressingType {
     // ZeroPageIndexedWriteY,
     ZeroPageIndexedReadX,
     // ZeroPageIndexedReadY,
+    ZeroPageIndexedReadModifyWriteX,
+    // ZeroPageIndexedReadModifyWriteY,
     AbsoluteIndirectJMP,
     ImpliedPHA,
     ImpliedPLA,
@@ -153,6 +155,12 @@ impl Addressing {
             AddressingType::ImpliedPLA => {
                 String::from("")
             }
+            AddressingType::ZeroPageIndexedReadModifyWriteX => {
+                format!("${:02X},X", self.operand1.unwrap())
+            }
+            // AddressingType::ZeroPageIndexedReadModifyWriteY => {
+            //     format!("${:02X},Y", self.operand1.unwrap())
+            // }
         }
     }
 
@@ -571,6 +579,43 @@ impl Addressing {
     //     self.zero_page_indexed_read(sub_tick, cpu, memory, inst, cpu.y, opcode)
     // }
 
+    fn zero_page_indexed_read_modify_write(&mut self, sub_tick: u8, cpu: &mut Cpu, memory: &mut Memory, inst: fn(&mut Cpu, u8) -> u8, index: u8, opcode: u8) -> Result<u8, String> {
+        if sub_tick == 2 {
+            self.low = self.read_operand(memory, cpu);
+            return Ok(sub_tick + 1);
+        }
+        if sub_tick == 3 {
+            self.low = self.low.wrapping_add(index);
+            return Ok(sub_tick + 1);
+        }
+        if sub_tick == 4 {
+            return Ok(sub_tick + 1);
+        }
+        if sub_tick == 5 {
+            return Ok(sub_tick + 1);
+        }
+        if sub_tick == 6 {
+            let value = inst(cpu, memory.get_from_low(self.low));
+            memory.set_from_low(self.low, value);
+            return Ok(1);
+        }
+        Err(format!("Illegal sub_tick {} for opcode {:02X}", sub_tick, opcode))
+    }
+
+    pub fn zero_page_indexed_read_modify_write_x(&mut self, sub_tick: u8, cpu: &mut Cpu, memory: &mut Memory, inst: fn(&mut Cpu, u8) -> u8, opcode: u8) -> Result<u8, String> {
+        if sub_tick == 2 {
+            self.set_addressing_type(AddressingType::ZeroPageIndexedReadModifyWriteX);
+        }
+        self.zero_page_indexed_read_modify_write(sub_tick, cpu, memory, inst, cpu.x, opcode)
+    }
+
+    // pub fn zero_page_indexed_read_modify_write_y(&mut self, sub_tick: u8, cpu: &mut Cpu, memory: &mut Memory, inst: fn(&mut Cpu, u8)->u8, opcode: u8) -> Result<u8, String> {
+    //     if sub_tick == 2 {
+    //         self.set_addressing_type(AddressingType::ZeroPageIndexedReadModifyWriteY);
+    //     }
+    //     self.zero_page_indexed_read_modify_write(sub_tick, cpu, memory, inst, cpu.y, opcode)
+    // }
+
     pub fn absolute_indirect_jmp(&mut self, sub_tick: u8, cpu: &mut Cpu, memory: &Memory, opcode: u8) -> Result<u8, String> {
         if sub_tick == 2 {
             self.set_addressing_type(AddressingType::AbsoluteIndirectJMP);
@@ -594,21 +639,20 @@ impl Addressing {
         Err(format!("Illegal sub_tick {} for opcode {:02X}", sub_tick, opcode))
     }
 
-    pub fn implied_pha(&mut self, sub_tick: u8, cpu: &mut Cpu, memory: &mut Memory, opcode: u8) -> Result<u8, String> {
+    pub fn implied_php_pha(&mut self, sub_tick: u8, cpu: &mut Cpu, memory: &mut Memory, inst: fn(&mut Cpu) -> u8, opcode: u8) -> Result<u8, String> {
         if sub_tick == 2 {
             self.set_addressing_type(AddressingType::ImpliedPHA);
             return Ok(sub_tick + 1);
         }
         if sub_tick == 3 {
-            memory.set_stack(cpu.sp, cpu.a);
+            memory.set_stack(cpu.sp, inst(cpu));
             cpu.sp = cpu.sp.wrapping_sub(1);
-            cpu.inst = "PHA";
             return Ok(1);
         }
         Err(format!("Illegal sub_tick {} for opcode {:02X}", sub_tick, opcode))
     }
 
-    pub fn implied_pla(&mut self, sub_tick: u8, cpu: &mut Cpu, memory: &Memory, opcode: u8) -> Result<u8, String> {
+    pub fn implied_plp_pla(&mut self, sub_tick: u8, cpu: &mut Cpu, memory: &Memory, inst: fn(&mut Cpu, u8), opcode: u8) -> Result<u8, String> {
         if sub_tick == 2 {
             self.set_addressing_type(AddressingType::ImpliedPLA);
             return Ok(sub_tick + 1);
@@ -618,8 +662,7 @@ impl Addressing {
             return Ok(sub_tick + 1);
         }
         if sub_tick == 4 {
-            cpu.a = memory.get_stack(cpu.sp);
-            cpu.inst = "PLA";
+            inst(cpu, memory.get_stack(cpu.sp));
             return Ok(1);
         }
         Err(format!("Illegal sub_tick {} for opcode {:02X}", sub_tick, opcode))
