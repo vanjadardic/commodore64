@@ -6,6 +6,7 @@ use crate::emulator::cpu::Cpu;
 pub struct CpuLogger {
     enabled: bool,
     tick: u64,
+    tick_tmp: u64,
     pc: u16,
     sp: u8,
     p: u8,
@@ -24,6 +25,7 @@ impl CpuLogger {
         CpuLogger {
             enabled: true,
             tick: 0,
+            tick_tmp: 0,
             pc: 0,
             sp: 0,
             p: 0,
@@ -37,8 +39,12 @@ impl CpuLogger {
         }
     }
 
-    pub fn init(&mut self, tick: u64, cpu: &Cpu) {
-        self.tick = tick;
+    pub fn set_tick(&mut self, tick: u64) {
+        self.tick_tmp = tick;
+    }
+
+    pub fn init(&mut self, cpu: &Cpu) {
+        self.tick = self.tick_tmp;
         self.pc = cpu.pc;
         self.sp = cpu.sp;
         self.p = cpu.p;
@@ -67,7 +73,14 @@ impl CpuLogger {
             None => "   ".to_string()
         }.as_str());
         line.push_str(format!("   {} {}", cpu.inst, addressing.description()).as_str());
-        if self.pc == 0xFD50 {
+
+        if self.disabled && self.pc == self.disabled_until {
+            self.disabled = false;
+            debug!("            end skip");
+        }
+
+
+        if self.pc == 0xFD50 && !self.disabled{
             self.disabled = true;
             self.disabled_until = 0xFCF8;
             debug!("{:04X} . {:04X} skip '{}'", self.pc, self.disabled_until, "initialise memory pointers");
@@ -77,11 +90,69 @@ impl CpuLogger {
         //     self.disabled_until = 0xFCFB;
         //     debug!("{:04X} . {:04X} skip '{}'", self.pc, self.disabled_until, "restore I/O vectors");
         // }
-        if self.pc == 0xFF5B {
+        if self.pc == 0xFF5B && !self.disabled{
             // self.cnt = 1;
                 self.disabled = true;
                 self.disabled_until = 0xFCFE;
                 debug!("{:04X} . {:04X} skip '{}'", self.pc, self.disabled_until, "initialise screen and keyboard");
+        }
+        if self.pc == 0xAB47 && !self.disabled{
+            //self.cnt = 1;
+            self.disabled = true;
+            self.disabled_until = 0xAB4C;
+            debug!("{:04X} . {:04X} skip '{}'", self.pc, self.disabled_until, "*** print character");
+        }
+
+        if self.pc == 0xAB21 && !self.disabled{
+            //self.cnt = 1;
+            self.disabled = true;
+            self.disabled_until = 0xAAE7;
+            debug!("{:04X} . {:04X} skip '{}'", self.pc, self.disabled_until, "*** print string from utility pointer");
+        }
+        if self.pc == 0xFCF2 && !self.disabled{
+            //self.cnt = 1;
+            self.disabled = true;
+            self.disabled_until = 0xFCF5;
+            debug!("{:04X} . {:04X} skip '{}'", self.pc, self.disabled_until, "initialise SID, CIA and IRQ");
+        }
+        if self.pc == 0xFCF5 && !self.disabled{
+            //self.cnt = 1;
+            self.disabled = true;
+            self.disabled_until = 0xFCF8;
+            debug!("{:04X} . {:04X} skip '{}'", self.pc, self.disabled_until, "RAM test and find RAM end");
+        }
+        if self.pc == 0xFCF8 && !self.disabled{
+            //self.cnt = 1;
+            self.disabled = true;
+            self.disabled_until = 0xFCFB;
+            debug!("{:04X} . {:04X} skip '{}'", self.pc, self.disabled_until, "restore default I/O vectors");
+        }
+        if self.pc == 0xFCFB && !self.disabled{
+            //self.cnt = 1;
+            self.disabled = true;
+            self.disabled_until = 0xFCFE;
+            debug!("{:04X} . {:04X} skip '{}'", self.pc, self.disabled_until, "initialise VIC and screen editor");
+        }
+        if self.pc == 0xE394 && !self.disabled{
+            //self.cnt = 1;
+            //self.disabled = true;
+            self.disabled_until = 0xE39D;
+            debug!("{:04X} . {:04X} skip '{}'", self.pc, self.disabled_until, "*** BASIC cold start entry point");
+        }
+        if self.pc == 0xB487 && !self.disabled{
+            //self.cnt = 1;
+            self.disabled = true;
+            self.disabled_until = 0xB4F3;
+            debug!("{:04X} . {:04X} skip '{}'", self.pc, self.disabled_until, "print \" terminated string to utility pointer");
+        }
+
+
+
+        if self.pc == 0xE5CD && !self.disabled{
+            // self.cnt = 1;
+            self.disabled = true;
+            self.disabled_until = 0xE5D6;
+            debug!("({:4}){:04X} . {:04X} skip '{}'",  self.tick, self.pc, self.disabled_until, "basic idle loop");
         }
         if self.cnt > 0 {
             self.cnt += 1;
@@ -93,7 +164,7 @@ impl CpuLogger {
 
         if self.disabled && self.pc == self.disabled_until {
             self.disabled = false;
-            debug!("            end skip");
+            //debug!("            end skip");
         }
 
         if !self.disabled {

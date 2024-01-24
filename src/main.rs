@@ -15,6 +15,25 @@ const SCREEN_HEIGHT: u32 = 200;
 
 mod emulator;
 
+const COLORS: [u32; 16] = [
+    0x000000,
+    0xFFFFFF,
+    0x880000,
+    0xAAFFEE,
+    0xCC44CC,
+    0x00CC55,
+    0x0000AA,
+    0xEEEE77,
+    0xDD8855,
+    0x664400,
+    0xFF7777,
+    0x333333,
+    0x777777,
+    0xAAFF66,
+    0x0088FF,
+    0xBBBBBB,
+];
+
 pub fn main() -> Result<(), String> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
     // error!("starting up");
@@ -110,10 +129,11 @@ pub fn main() -> Result<(), String> {
             for y in 0..SCREEN_HEIGHT as usize {
                 for x in 0..SCREEN_WIDTH as usize {
                     let offset = y * pitch + x * 3;
-                    let value = if (x + y) % 2 == 0 { 0xff } else { 0x00 };
-                    buffer[offset] = value;
-                    buffer[offset + 1] = value;
-                    buffer[offset + 2] = value;
+                    let value = emulator.gpu.display[y][x] as usize;
+                    let col = COLORS[value];
+                    buffer[offset] = (col >> 16) as u8;
+                    buffer[offset + 1] = (col >> 8) as u8;
+                    buffer[offset + 2] = (col >> 0) as u8;
                 }
             }
         })?;

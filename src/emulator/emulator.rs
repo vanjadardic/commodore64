@@ -1,7 +1,9 @@
 use std::time::Duration;
+use log::debug;
 
 use crate::emulator::addressing::Addressing;
 use crate::emulator::cpu::Cpu;
+use crate::emulator::gpu::Gpu;
 use crate::emulator::logger::CpuLogger;
 use crate::emulator::memory::Memory;
 
@@ -21,11 +23,8 @@ pub struct Emulator {
     tick_count: u64,
     memory: Memory,
     cpu: Cpu,
+    pub gpu: Gpu,
     addressing: Addressing,
-    /// tick counter within an instruction
-    sub_tick: u8,
-    /// currently executing instruction
-    opcode: u8,
     cpu_logger: CpuLogger,
 }
 
@@ -34,15 +33,14 @@ impl Emulator {
         let memory = Memory::new();
         let mut cpu = Cpu::new();
         let low = memory.get_from_word(0xFFFC);
-        let high = memory.get_from_word(0xFFFC + 1);
+        let high = memory.get_from_word(0xFFFD);
         cpu.set_pc(low, high);
         Emulator {
             tick_count: 0,
             memory,
             cpu,
+            gpu: Gpu::new(),
             addressing: Addressing::new(),
-            sub_tick: 1,
-            opcode: 0,
             cpu_logger: CpuLogger::new(),
         }
     }
@@ -50,149 +48,14 @@ impl Emulator {
     pub fn step(&mut self, elapsed: Duration) -> Result<(), String> {
         let want_ticks = ((elapsed.as_nanos() * CLOCK) / NANOS_PER_SEC) as u64;
         while self.tick_count < want_ticks {
-            self.tick()?;
+            self.cpu_logger.set_tick(self.tick_count);
+            if self.tick_count == 2118528 {
+                debug!("{}", self.tick_count);
+            }
+            self.gpu.tick(&self.memory);
+            self.cpu.tick(&mut self.cpu_logger, &mut self.memory, &mut self.addressing)?;
             self.tick_count += 1;
         }
-        Ok(())
-    }
-
-    fn tick(&mut self) -> Result<(), String> {
-        if self.sub_tick == 1 {
-            self.cpu_logger.init(self.tick_count, &self.cpu);
-            let pc = self.cpu.get_and_increment_pc();
-            // if pc == 0xA408 {
-            //     println!();
-            // }
-            self.opcode = self.memory.get_from_word(pc);
-            self.cpu_logger.opcode(self.opcode);
-            self.sub_tick += 1;
-            return Ok(());
-        }
-        self.sub_tick = match self.opcode {
-            x @ 0x05 => self.addressing.zero_page_read(self.sub_tick, &mut self.cpu, &self.memory, Cpu::ora, x),
-            x @ 0x06 => self.addressing.zero_page_read_modify_write(self.sub_tick, &mut self.cpu, &mut self.memory, Cpu::asl, x),
-            x @ 0x08 => self.addressing.implied_php_pha(self.sub_tick, &mut self.cpu, &mut self.memory, Cpu::php, x),
-            x @ 0x09 => self.addressing.immediate(self.sub_tick, &mut self.cpu, &self.memory, Cpu::ora, x),
-            x @ 0x0A => self.addressing.accumulator(self.sub_tick, &mut self.cpu, Cpu::asl, x),
-            x @ 0x0D => self.addressing.absolute_read(self.sub_tick, &mut self.cpu, &self.memory, Cpu::ora, x),
-            x @ 0x10 => self.addressing.relative(self.sub_tick, &mut self.cpu, &self.memory, Cpu::bpl, x),
-            x @ 0x16 => self.addressing.zero_page_indexed_read_modify_write_x(self.sub_tick, &mut self.cpu, &mut self.memory, Cpu::asl, x),
-            x @ 0x18 => self.addressing.implied(self.sub_tick, &mut self.cpu, Cpu::clc, x),
-            x @ 0x20 => self.addressing.absolute_jsr(self.sub_tick, &mut self.cpu, &mut self.memory, x),
-            x @ 0x24 => self.addressing.zero_page_read(self.sub_tick, &mut self.cpu, &self.memory, Cpu::bit, x),
-            x @ 0x28 => self.addressing.implied_plp_pla(self.sub_tick, &mut self.cpu, &self.memory, Cpu::plp, x),
-            x @ 0x29 => self.addressing.immediate(self.sub_tick, &mut self.cpu, &self.memory, Cpu::and, x),
-            x @ 0x2A => self.addressing.accumulator(self.sub_tick, &mut self.cpu, Cpu::rol, x),
-            x @ 0x2D => self.addressing.absolute_read(self.sub_tick, &mut self.cpu, &self.memory, Cpu::and, x),
-            x @ 0x30 => self.addressing.relative(self.sub_tick, &mut self.cpu, &self.memory, Cpu::bmi, x),
-            x @ 0x38 => self.addressing.implied(self.sub_tick, &mut self.cpu, Cpu::sec, x),
-            // x @ 0x40 => { //implied/stack
-            //     if self.sub_tick == 2 {
-            //         self.sub_tick += 1;
-            //         return Ok(());
-            //     }
-            //     if self.sub_tick == 3 {
-            //         self.cpu.sp = self.cpu.sp.wrapping_add(1);
-            //         self.sub_tick += 1;
-            //         return Ok(());
-            //     }
-            //     if self.sub_tick == 4 {
-            //         self.cpu.p = self.memory.get_stack(self.cpu.sp);
-            //         self.cpu.sp = self.cpu.sp.wrapping_add(1);
-            //         self.sub_tick += 1;
-            //         return Ok(());
-            //     }
-            //     if self.sub_tick == 5 {
-            //         self.cpu.set_pcl(self.memory.get_stack(self.cpu.sp));
-            //         self.cpu.sp = self.cpu.sp.wrapping_add(1);
-            //         self.sub_tick += 1;
-            //         return Ok(());
-            //     }
-            //     if self.sub_tick == 6 {
-            //         self.cpu.set_pch(self.memory.get_stack(self.cpu.sp));
-            //         self.cpu_logger.borrow_mut().instruction("RTI");
-            //         self.sub_tick = 1;
-            //         return Ok(());
-            //     }
-            //     Err(format!("Illegal sub_tick {} for opcode {:02X}", self.sub_tick, x))
-            // }
-            x @ 0x45 => self.addressing.zero_page_read(self.sub_tick, &mut self.cpu, &mut self.memory, Cpu::eor, x),
-            x @ 0x46 => self.addressing.zero_page_read_modify_write(self.sub_tick, &mut self.cpu, &mut self.memory, Cpu::lsr, x),
-            x @ 0x48 => self.addressing.implied_php_pha(self.sub_tick, &mut self.cpu, &mut self.memory, Cpu::pha, x),
-            x @ 0x49 => self.addressing.immediate(self.sub_tick, &mut self.cpu, &self.memory, Cpu::eor, x),
-            x @ 0x4C => self.addressing.absolute_jmp(self.sub_tick, &mut self.cpu, &self.memory, x),
-            x @ 0x56 => self.addressing.zero_page_indexed_read_modify_write_x(self.sub_tick, &mut self.cpu, &mut self.memory, Cpu::lsr, x),
-            x @ 0x58 => self.addressing.implied(self.sub_tick, &mut self.cpu, Cpu::cli, x),
-            x @ 0x60 => self.addressing.implied_rts(self.sub_tick, &mut self.cpu, &self.memory, x),
-            x @ 0x65 => self.addressing.zero_page_read(self.sub_tick, &mut self.cpu, &self.memory, Cpu::adc, x),
-            x @ 0x66 => self.addressing.zero_page_read_modify_write(self.sub_tick, &mut self.cpu, &mut self.memory, Cpu::ror, x),
-            x @ 0x68 => self.addressing.implied_plp_pla(self.sub_tick, &mut self.cpu, &self.memory, Cpu::pla, x),
-            x @ 0x69 => self.addressing.immediate(self.sub_tick, &mut self.cpu, &self.memory, Cpu::adc, x),
-            x @ 0x6A => self.addressing.accumulator(self.sub_tick, &mut self.cpu, Cpu::ror, x),
-            x @ 0x6C => self.addressing.absolute_indirect_jmp(self.sub_tick, &mut self.cpu, &self.memory, x),
-            x @ 0x76 => self.addressing.zero_page_indexed_read_modify_write_x(self.sub_tick, &mut self.cpu, &mut self.memory, Cpu::ror, x),
-            x @ 0x78 => self.addressing.implied(self.sub_tick, &mut self.cpu, Cpu::sei, x),
-            x @ 0x79 => self.addressing.absolute_indexed_read_y(self.sub_tick, &mut self.cpu, &self.memory, Cpu::adc, x),
-            x @ 0x84 => self.addressing.zero_page_write(self.sub_tick, &mut self.cpu, &mut self.memory, Cpu::sty, x),
-            x @ 0x85 => self.addressing.zero_page_write(self.sub_tick, &mut self.cpu, &mut self.memory, Cpu::sta, x),
-            x @ 0x86 => self.addressing.zero_page_write(self.sub_tick, &mut self.cpu, &mut self.memory, Cpu::stx, x),
-            x @ 0x88 => self.addressing.implied(self.sub_tick, &mut self.cpu, Cpu::dey, x),
-            x @ 0x8A => self.addressing.implied(self.sub_tick, &mut self.cpu, Cpu::txa, x),
-            x @ 0x8C => self.addressing.absolute_write(self.sub_tick, &mut self.cpu, &mut self.memory, Cpu::sty, x),
-            x @ 0x8D => self.addressing.absolute_write(self.sub_tick, &mut self.cpu, &mut self.memory, Cpu::sta, x),
-            x @ 0x8E => self.addressing.absolute_write(self.sub_tick, &mut self.cpu, &mut self.memory, Cpu::stx, x),
-            x @ 0x90 => self.addressing.relative(self.sub_tick, &mut self.cpu, &self.memory, Cpu::bcc, x),
-            x @ 0x91 => self.addressing.indirect_indexed_write(self.sub_tick, &mut self.cpu, &mut self.memory, Cpu::sta, x),
-            x @ 0x94 => self.addressing.zero_page_indexed_write_x(self.sub_tick, &mut self.cpu, &mut self.memory, Cpu::sty, x),
-            x @ 0x95 => self.addressing.zero_page_indexed_write_x(self.sub_tick, &mut self.cpu, &mut self.memory, Cpu::sta, x),
-            x @ 0x98 => self.addressing.implied(self.sub_tick, &mut self.cpu, Cpu::tya, x),
-            x @ 0x99 => self.addressing.absolute_indexed_write_y(self.sub_tick, &mut self.cpu, &mut self.memory, Cpu::sta, x),
-            x @ 0x9A => self.addressing.implied(self.sub_tick, &mut self.cpu, Cpu::txs, x),
-            x @ 0x9D => self.addressing.absolute_indexed_write_x(self.sub_tick, &mut self.cpu, &mut self.memory, Cpu::sta, x),
-            x @ 0xA0 => self.addressing.immediate(self.sub_tick, &mut self.cpu, &self.memory, Cpu::ldy, x),
-            x @ 0xA2 => self.addressing.immediate(self.sub_tick, &mut self.cpu, &self.memory, Cpu::ldx, x),
-            x @ 0xA4 => self.addressing.zero_page_read(self.sub_tick, &mut self.cpu, &self.memory, Cpu::ldy, x),
-            x @ 0xA5 => self.addressing.zero_page_read(self.sub_tick, &mut self.cpu, &self.memory, Cpu::lda, x),
-            x @ 0xA6 => self.addressing.zero_page_read(self.sub_tick, &mut self.cpu, &self.memory, Cpu::ldx, x),
-            x @ 0xA8 => self.addressing.implied(self.sub_tick, &mut self.cpu, Cpu::tay, x),
-            x @ 0xA9 => self.addressing.immediate(self.sub_tick, &mut self.cpu, &self.memory, Cpu::lda, x),
-            x @ 0xAA => self.addressing.implied(self.sub_tick, &mut self.cpu, Cpu::tax, x),
-            x @ 0xAC => self.addressing.absolute_read(self.sub_tick, &mut self.cpu, &self.memory, Cpu::ldy, x),
-            x @ 0xAD => self.addressing.absolute_read(self.sub_tick, &mut self.cpu, &self.memory, Cpu::lda, x),
-            x @ 0xAE => self.addressing.absolute_read(self.sub_tick, &mut self.cpu, &self.memory, Cpu::ldx, x),
-            x @ 0xB0 => self.addressing.relative(self.sub_tick, &mut self.cpu, &self.memory, Cpu::bcs, x),
-            x @ 0xB1 => self.addressing.indirect_indexed_read(self.sub_tick, &mut self.cpu, &self.memory, Cpu::lda, x),
-            x @ 0xB4 => self.addressing.zero_page_indexed_read_x(self.sub_tick, &mut self.cpu, &self.memory, Cpu::ldy, x),
-            x @ 0xB5 => self.addressing.zero_page_indexed_read_x(self.sub_tick, &mut self.cpu, &self.memory, Cpu::lda, x),
-            x @ 0xB9 => self.addressing.absolute_indexed_read_y(self.sub_tick, &mut self.cpu, &self.memory, Cpu::lda, x),
-            x @ 0xBD => self.addressing.absolute_indexed_read_x(self.sub_tick, &mut self.cpu, &self.memory, Cpu::lda, x),
-            x @ 0xC0 => self.addressing.immediate(self.sub_tick, &mut self.cpu, &self.memory, Cpu::cpy, x),
-            x @ 0xC4 => self.addressing.zero_page_read(self.sub_tick, &mut self.cpu, &self.memory, Cpu::cpy, x),
-            x @ 0xC5 => self.addressing.zero_page_read(self.sub_tick, &mut self.cpu, &self.memory, Cpu::cmp, x),
-            x @ 0xC6 => self.addressing.zero_page_read_modify_write(self.sub_tick, &mut self.cpu, &mut self.memory, Cpu::dec, x),
-            x @ 0xC8 => self.addressing.implied(self.sub_tick, &mut self.cpu, Cpu::iny, x),
-            x @ 0xC9 => self.addressing.immediate(self.sub_tick, &mut self.cpu, &self.memory, Cpu::cmp, x),
-            x @ 0xCA => self.addressing.implied(self.sub_tick, &mut self.cpu, Cpu::dex, x),
-            x @ 0xCD => self.addressing.absolute_read(self.sub_tick, &mut self.cpu, &self.memory, Cpu::cmp, x),
-            x @ 0xD0 => self.addressing.relative(self.sub_tick, &mut self.cpu, &self.memory, Cpu::bne, x),
-            x @ 0xD1 => self.addressing.indirect_indexed_read(self.sub_tick, &mut self.cpu, &self.memory, Cpu::cmp, x),
-            x @ 0xD8 => self.addressing.implied(self.sub_tick, &mut self.cpu, Cpu::cld, x),
-            x @ 0xDD => self.addressing.absolute_indexed_read_x(self.sub_tick, &mut self.cpu, &self.memory, Cpu::cmp, x),
-            x @ 0xE0 => self.addressing.immediate(self.sub_tick, &mut self.cpu, &self.memory, Cpu::cpx, x),
-            x @ 0xE4 => self.addressing.zero_page_read(self.sub_tick, &mut self.cpu, &self.memory, Cpu::cpx, x),
-            x @ 0xE5 => self.addressing.zero_page_read(self.sub_tick, &mut self.cpu, &self.memory, Cpu::sbc, x),
-            x @ 0xE6 => self.addressing.zero_page_read_modify_write(self.sub_tick, &mut self.cpu, &mut self.memory, Cpu::inc, x),
-            x @ 0xE8 => self.addressing.implied(self.sub_tick, &mut self.cpu, Cpu::inx, x),
-            x @ 0xE9 => self.addressing.immediate(self.sub_tick, &mut self.cpu, &self.memory, Cpu::sbc, x),
-            x @ 0xEC => self.addressing.absolute_read(self.sub_tick, &mut self.cpu, &self.memory, Cpu::cpx, x),
-            x @ 0xF0 => self.addressing.relative(self.sub_tick, &mut self.cpu, &self.memory, Cpu::beq, x),
-            x => Err(format!("Illegal opcode {:02X} at {:04X}", x, self.cpu.pc - 1))
-        }?;
-
-        if self.sub_tick == 1 {
-            self.cpu_logger.log(&self.cpu, &self.addressing);
-        }
-
         Ok(())
     }
 }
