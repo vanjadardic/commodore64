@@ -1,5 +1,3 @@
-use log::debug;
-
 pub struct Gpu {
     memory_control_register: u8,
     border_color: u8,
@@ -16,21 +14,27 @@ impl Gpu {
     }
 
     pub fn get(&self, loc: usize) -> u8 {
-        debug!("gpu get {:04X} ", loc);
+        if loc == 0xD018 {
+            return self.memory_control_register;
+        } else if loc == 0xD020 {
+            return self.border_color;
+        } else if loc == 0xD021 {
+            return self.background_color;
+        }
+        //debug!("gpu get {:04X} ", loc);
         0
     }
 
     pub fn set(&mut self, loc: usize, value: u8) {
         if loc == 0xD018 {
             self.memory_control_register = value;
-        }
-        if loc == 0xD020 {
+        } else if loc == 0xD020 {
             self.border_color = value;
-        }
-        if loc == 0xD021 {
+        } else if loc == 0xD021 {
             self.background_color = value;
+        } else {
+            //debug!("gpu set {:04X} = {:02X}", loc, value);
         }
-        debug!("gpu set {:04X} = {:02X}", loc, value);
     }
 
     pub fn get_video_matrix_address(&self) -> u16 {

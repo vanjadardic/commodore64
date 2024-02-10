@@ -1,11 +1,12 @@
 use std::time::Duration;
-use log::debug;
 
 use crate::emulator::addressing::Addressing;
 use crate::emulator::cpu::Cpu;
 use crate::emulator::gpu::Gpu;
+use crate::emulator::keyboard::{Key, Keyboard};
 use crate::emulator::logger::CpuLogger;
 use crate::emulator::memory::Memory;
+use crate::emulator::timer_a::TimerA;
 
 // const MASTER_CLOCK_PAL: u128 = 17_734_475;
 // const MASTER_CLOCK_NTSC: u128 = 14_318_180;
@@ -26,11 +27,13 @@ pub struct Emulator {
     pub gpu: Gpu,
     addressing: Addressing,
     cpu_logger: CpuLogger,
+    timer_a: TimerA,
+    keyboard: Keyboard,
 }
 
 impl Emulator {
     pub fn new() -> Emulator {
-        let memory = Memory::new();
+        let mut memory = Memory::new();
         let mut cpu = Cpu::new();
         let low = memory.get_from_word(0xFFFC);
         let high = memory.get_from_word(0xFFFD);
@@ -42,21 +45,44 @@ impl Emulator {
             gpu: Gpu::new(),
             addressing: Addressing::new(),
             cpu_logger: CpuLogger::new(),
+            timer_a: TimerA::new(),
+            keyboard: Keyboard::new(),
         }
     }
 
     pub fn step(&mut self, elapsed: Duration) -> Result<(), String> {
         let want_ticks = ((elapsed.as_nanos() * CLOCK) / NANOS_PER_SEC) as u64;
         while self.tick_count < want_ticks {
+            self.memory.cia1().port_b_read_or(0xFF);
+
+            for (i, pressed) in self.keyboard.pressed().iter().enumerate() {
+                if *pressed {
+                    let col = 1 << (i % 8);
+                    if self.memory.cia1().port_a_direction() & col > 0 {
+                        //debug!("port_a_write={}", self.memory.cia1().port_a_write());
+                        if self.memory.cia1().port_a_write() & col == 0 {
+                            let row = 1 << (i / 8);
+                            self.memory.cia1().port_b_read_and(!row);
+                            //debug!("port_b_read={}", self.memory.cia1().port_b_read());
+                        }
+                    }
+                }
+            }
+
             self.cpu_logger.set_tick(self.tick_count);
             if self.tick_count == 2118528 {
-                debug!("{}", self.tick_count);
+                //debug!("{}", self.tick_count);
             }
             self.gpu.tick(&self.memory);
+            self.timer_a.tick(&mut self.cpu, self.memory.cia1());
             self.cpu.tick(&mut self.cpu_logger, &mut self.memory, &mut self.addressing)?;
             self.tick_count += 1;
         }
         Ok(())
+    }
+
+    pub fn key_change(&mut self, key: Key, pressed: bool) {
+        self.keyboard.change_key_state(key, pressed);
     }
 }
 

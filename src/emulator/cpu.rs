@@ -13,6 +13,8 @@ pub struct Cpu {
     pub opcode: u8,
     // debug
     pub inst: &'static str,
+    pub interrupted: bool,
+    pub interrupted_started: bool,
 }
 
 // pub enum Flag {
@@ -37,6 +39,8 @@ impl Cpu {
             state: 1,
             opcode: 0,
             inst: "",
+            interrupted: false,
+            interrupted_started: false,
         }
     }
 
@@ -46,135 +50,126 @@ impl Cpu {
         // }
         if self.state == 1 {
             cpu_logger.init(&self);
+            if self.interrupted {
+                self.state += 1;
+                self.interrupted_started = true;
+                return Ok(());
+            }
+            self.interrupted_started = false;
             let pc = self.get_and_increment_pc();
             if pc == 0xBC9B {
-                println!();
+                //println!();
             }
             self.opcode = memory.get_from_word(pc);
             cpu_logger.opcode(self.opcode);
             self.state += 1;
             return Ok(());
         }
-        self.state = match self.opcode {
-            x @ 0x05 => addressing.zero_page_read(self.state, self, memory, Cpu::ora, x),
-            x @ 0x06 => addressing.zero_page_read_modify_write(self.state, self, memory, Cpu::asl, x),
-            x @ 0x08 => addressing.implied_php_pha(self.state, self, memory, Cpu::php, x),
-            x @ 0x09 => addressing.immediate(self.state, self, memory, Cpu::ora, x),
-            x @ 0x0A => addressing.accumulator(self.state, self, Cpu::asl, x),
-            x @ 0x0D => addressing.absolute_read(self.state, self, memory, Cpu::ora, x),
-            x @ 0x10 => addressing.relative(self.state, self, memory, Cpu::bpl, x),
-            x @ 0x16 => addressing.zero_page_indexed_read_modify_write_x(self.state, self, memory, Cpu::asl, x),
-            x @ 0x18 => addressing.implied(self.state, self, Cpu::clc, x),
-            x @ 0x20 => addressing.absolute_jsr(self.state, self, memory, x),
-            x @ 0x24 => addressing.zero_page_read(self.state, self, memory, Cpu::bit, x),
-            x @ 0x28 => addressing.implied_plp_pla(self.state, self, memory, Cpu::plp, x),
-            x @ 0x29 => addressing.immediate(self.state, self, memory, Cpu::and, x),
-            x @ 0x2A => addressing.accumulator(self.state, self, Cpu::rol, x),
-            x @ 0x2D => addressing.absolute_read(self.state, self, memory, Cpu::and, x),
-            x @ 0x30 => addressing.relative(self.state, self, memory, Cpu::bmi, x),
-            x @ 0x38 => addressing.implied(self.state, self, Cpu::sec, x),
-            // x @ 0x40 => { //implied/stack
-            //     if self.sub_tick == 2 {
-            //         self.sub_tick += 1;
-            //         return Ok(());
-            //     }
-            //     if self.sub_tick == 3 {
-            //         self.cpu.sp = self.cpu.sp.wrapping_add(1);
-            //         self.sub_tick += 1;
-            //         return Ok(());
-            //     }
-            //     if self.sub_tick == 4 {
-            //         self.cpu.p = self.memory.get_stack(self.cpu.sp);
-            //         self.cpu.sp = self.cpu.sp.wrapping_add(1);
-            //         self.sub_tick += 1;
-            //         return Ok(());
-            //     }
-            //     if self.sub_tick == 5 {
-            //         self.cpu.set_pcl(self.memory.get_stack(self.cpu.sp));
-            //         self.cpu.sp = self.cpu.sp.wrapping_add(1);
-            //         self.sub_tick += 1;
-            //         return Ok(());
-            //     }
-            //     if self.sub_tick == 6 {
-            //         self.cpu.set_pch(self.memory.get_stack(self.cpu.sp));
-            //         self.cpu_logger.borrow_mut().instruction("RTI");
-            //         self.sub_tick = 1;
-            //         return Ok(());
-            //     }
-            //     Err(format!("Illegal sub_tick {} for opcode {:02X}", self.sub_tick, x))
-            // }
-            x @ 0x45 => addressing.zero_page_read(self.state, self, memory, Cpu::eor, x),
-            x @ 0x46 => addressing.zero_page_read_modify_write(self.state, self, memory, Cpu::lsr, x),
-            x @ 0x48 => addressing.implied_php_pha(self.state, self, memory, Cpu::pha, x),
-            x @ 0x49 => addressing.immediate(self.state, self, memory, Cpu::eor, x),
-            x @ 0x4C => addressing.absolute_jmp(self.state, self, memory, x),
-            x @ 0x56 => addressing.zero_page_indexed_read_modify_write_x(self.state, self, memory, Cpu::lsr, x),
-            x @ 0x58 => addressing.implied(self.state, self, Cpu::cli, x),
-            x @ 0x60 => addressing.implied_rts(self.state, self, memory, x),
-            x @ 0x65 => addressing.zero_page_read(self.state, self, memory, Cpu::adc, x),
-            x @ 0x66 => addressing.zero_page_read_modify_write(self.state, self, memory, Cpu::ror, x),
-            x @ 0x68 => addressing.implied_plp_pla(self.state, self, memory, Cpu::pla, x),
-            x @ 0x69 => addressing.immediate(self.state, self, memory, Cpu::adc, x),
-            x @ 0x6A => addressing.accumulator(self.state, self, Cpu::ror, x),
-            x @ 0x6C => addressing.absolute_indirect_jmp(self.state, self, memory, x),
-            x @ 0x76 => addressing.zero_page_indexed_read_modify_write_x(self.state, self, memory, Cpu::ror, x),
-            x @ 0x78 => addressing.implied(self.state, self, Cpu::sei, x),
-            x @ 0x79 => addressing.absolute_indexed_read_y(self.state, self, memory, Cpu::adc, x),
-            x @ 0x84 => addressing.zero_page_write(self.state, self, memory, Cpu::sty, x),
-            x @ 0x85 => addressing.zero_page_write(self.state, self, memory, Cpu::sta, x),
-            x @ 0x86 => addressing.zero_page_write(self.state, self, memory, Cpu::stx, x),
-            x @ 0x88 => addressing.implied(self.state, self, Cpu::dey, x),
-            x @ 0x8A => addressing.implied(self.state, self, Cpu::txa, x),
-            x @ 0x8C => addressing.absolute_write(self.state, self, memory, Cpu::sty, x),
-            x @ 0x8D => addressing.absolute_write(self.state, self, memory, Cpu::sta, x),
-            x @ 0x8E => addressing.absolute_write(self.state, self, memory, Cpu::stx, x),
-            x @ 0x90 => addressing.relative(self.state, self, memory, Cpu::bcc, x),
-            x @ 0x91 => addressing.indirect_indexed_write(self.state, self, memory, Cpu::sta, x),
-            x @ 0x94 => addressing.zero_page_indexed_write_x(self.state, self, memory, Cpu::sty, x),
-            x @ 0x95 => addressing.zero_page_indexed_write_x(self.state, self, memory, Cpu::sta, x),
-            x @ 0x98 => addressing.implied(self.state, self, Cpu::tya, x),
-            x @ 0x99 => addressing.absolute_indexed_write_y(self.state, self, memory, Cpu::sta, x),
-            x @ 0x9A => addressing.implied(self.state, self, Cpu::txs, x),
-            x @ 0x9D => addressing.absolute_indexed_write_x(self.state, self, memory, Cpu::sta, x),
-            x @ 0xA0 => addressing.immediate(self.state, self, memory, Cpu::ldy, x),
-            x @ 0xA2 => addressing.immediate(self.state, self, memory, Cpu::ldx, x),
-            x @ 0xA4 => addressing.zero_page_read(self.state, self, memory, Cpu::ldy, x),
-            x @ 0xA5 => addressing.zero_page_read(self.state, self, memory, Cpu::lda, x),
-            x @ 0xA6 => addressing.zero_page_read(self.state, self, memory, Cpu::ldx, x),
-            x @ 0xA8 => addressing.implied(self.state, self, Cpu::tay, x),
-            x @ 0xA9 => addressing.immediate(self.state, self, memory, Cpu::lda, x),
-            x @ 0xAA => addressing.implied(self.state, self, Cpu::tax, x),
-            x @ 0xAC => addressing.absolute_read(self.state, self, memory, Cpu::ldy, x),
-            x @ 0xAD => addressing.absolute_read(self.state, self, memory, Cpu::lda, x),
-            x @ 0xAE => addressing.absolute_read(self.state, self, memory, Cpu::ldx, x),
-            x @ 0xB0 => addressing.relative(self.state, self, memory, Cpu::bcs, x),
-            x @ 0xB1 => addressing.indirect_indexed_read(self.state, self, memory, Cpu::lda, x),
-            x @ 0xB4 => addressing.zero_page_indexed_read_x(self.state, self, memory, Cpu::ldy, x),
-            x @ 0xB5 => addressing.zero_page_indexed_read_x(self.state, self, memory, Cpu::lda, x),
-            x @ 0xB9 => addressing.absolute_indexed_read_y(self.state, self, memory, Cpu::lda, x),
-            x @ 0xBD => addressing.absolute_indexed_read_x(self.state, self, memory, Cpu::lda, x),
-            x @ 0xC0 => addressing.immediate(self.state, self, memory, Cpu::cpy, x),
-            x @ 0xC4 => addressing.zero_page_read(self.state, self, memory, Cpu::cpy, x),
-            x @ 0xC5 => addressing.zero_page_read(self.state, self, memory, Cpu::cmp, x),
-            x @ 0xC6 => addressing.zero_page_read_modify_write(self.state, self, memory, Cpu::dec, x),
-            x @ 0xC8 => addressing.implied(self.state, self, Cpu::iny, x),
-            x @ 0xC9 => addressing.immediate(self.state, self, memory, Cpu::cmp, x),
-            x @ 0xCA => addressing.implied(self.state, self, Cpu::dex, x),
-            x @ 0xCD => addressing.absolute_read(self.state, self, memory, Cpu::cmp, x),
-            x @ 0xD0 => addressing.relative(self.state, self, memory, Cpu::bne, x),
-            x @ 0xD1 => addressing.indirect_indexed_read(self.state, self, memory, Cpu::cmp, x),
-            x @ 0xD8 => addressing.implied(self.state, self, Cpu::cld, x),
-            x @ 0xDD => addressing.absolute_indexed_read_x(self.state, self, memory, Cpu::cmp, x),
-            x @ 0xE0 => addressing.immediate(self.state, self, memory, Cpu::cpx, x),
-            x @ 0xE4 => addressing.zero_page_read(self.state, self, memory, Cpu::cpx, x),
-            x @ 0xE5 => addressing.zero_page_read(self.state, self, memory, Cpu::sbc, x),
-            x @ 0xE6 => addressing.zero_page_read_modify_write(self.state, self, memory, Cpu::inc, x),
-            x @ 0xE8 => addressing.implied(self.state, self, Cpu::inx, x),
-            x @ 0xE9 => addressing.immediate(self.state, self, memory, Cpu::sbc, x),
-            x @ 0xEC => addressing.absolute_read(self.state, self, memory, Cpu::cpx, x),
-            x @ 0xF0 => addressing.relative(self.state, self, memory, Cpu::beq, x),
-            x => Err(format!("Illegal opcode {:02X} at {:04X}", x, self.pc - 1))
-        }?;
+        if self.interrupted_started {
+            self.state = addressing.implied_irq(self.state, self, memory)?;
+        } else {
+            self.state = match self.opcode {
+                x @ 0x05 => addressing.zero_page_read(self.state, self, memory, Cpu::ora, x),
+                x @ 0x06 => addressing.zero_page_read_modify_write(self.state, self, memory, Cpu::asl, x),
+                x @ 0x08 => addressing.implied_php_pha(self.state, self, memory, Cpu::php, x),
+                x @ 0x09 => addressing.immediate(self.state, self, memory, Cpu::ora, x),
+                x @ 0x0A => addressing.accumulator(self.state, self, Cpu::asl, x),
+                x @ 0x0D => addressing.absolute_read(self.state, self, memory, Cpu::ora, x),
+                x @ 0x10 => addressing.relative(self.state, self, memory, Cpu::bpl, x),
+                x @ 0x16 => addressing.zero_page_indexed_read_modify_write_x(self.state, self, memory, Cpu::asl, x),
+                x @ 0x18 => addressing.implied(self.state, self, Cpu::clc, x),
+                x @ 0x20 => addressing.absolute_jsr(self.state, self, memory, x),
+                x @ 0x24 => addressing.zero_page_read(self.state, self, memory, Cpu::bit, x),
+                x @ 0x26 => addressing.zero_page_read_modify_write(self.state, self, memory, Cpu::rol, x),
+                x @ 0x28 => addressing.implied_plp_pla(self.state, self, memory, Cpu::plp, x),
+                x @ 0x29 => addressing.immediate(self.state, self, memory, Cpu::and, x),
+                x @ 0x2A => addressing.accumulator(self.state, self, Cpu::rol, x),
+                x @ 0x2C => addressing.absolute_read(self.state, self, memory, Cpu::bit, x),
+                x @ 0x2D => addressing.absolute_read(self.state, self, memory, Cpu::and, x),
+                x @ 0x30 => addressing.relative(self.state, self, memory, Cpu::bmi, x),
+                x @ 0x38 => addressing.implied(self.state, self, Cpu::sec, x),
+                x @ 0x40 => addressing.implied_rti(self.state, self, memory, x),
+                x @ 0x45 => addressing.zero_page_read(self.state, self, memory, Cpu::eor, x),
+                x @ 0x46 => addressing.zero_page_read_modify_write(self.state, self, memory, Cpu::lsr, x),
+                x @ 0x48 => addressing.implied_php_pha(self.state, self, memory, Cpu::pha, x),
+                x @ 0x49 => addressing.immediate(self.state, self, memory, Cpu::eor, x),
+                x @ 0x4A => addressing.accumulator(self.state, self, Cpu::lsr, x),
+                x @ 0x4C => addressing.absolute_jmp(self.state, self, memory, x),
+                x @ 0x56 => addressing.zero_page_indexed_read_modify_write_x(self.state, self, memory, Cpu::lsr, x),
+                x @ 0x58 => addressing.implied(self.state, self, Cpu::cli, x),
+                x @ 0x60 => addressing.implied_rts(self.state, self, memory, x),
+                x @ 0x65 => addressing.zero_page_read(self.state, self, memory, Cpu::adc, x),
+                x @ 0x66 => addressing.zero_page_read_modify_write(self.state, self, memory, Cpu::ror, x),
+                x @ 0x68 => addressing.implied_plp_pla(self.state, self, memory, Cpu::pla, x),
+                x @ 0x69 => addressing.immediate(self.state, self, memory, Cpu::adc, x),
+                x @ 0x6A => addressing.accumulator(self.state, self, Cpu::ror, x),
+                x @ 0x6C => addressing.absolute_indirect_jmp(self.state, self, memory, x),
+                x @ 0x70 => addressing.relative(self.state, self, memory, Cpu::bvs, x),
+                x @ 0x76 => addressing.zero_page_indexed_read_modify_write_x(self.state, self, memory, Cpu::ror, x),
+                x @ 0x78 => addressing.implied(self.state, self, Cpu::sei, x),
+                x @ 0x79 => addressing.absolute_indexed_read_y(self.state, self, memory, Cpu::adc, x),
+                x @ 0x84 => addressing.zero_page_write(self.state, self, memory, Cpu::sty, x),
+                x @ 0x85 => addressing.zero_page_write(self.state, self, memory, Cpu::sta, x),
+                x @ 0x86 => addressing.zero_page_write(self.state, self, memory, Cpu::stx, x),
+                x @ 0x88 => addressing.implied(self.state, self, Cpu::dey, x),
+                x @ 0x8A => addressing.implied(self.state, self, Cpu::txa, x),
+                x @ 0x8C => addressing.absolute_write(self.state, self, memory, Cpu::sty, x),
+                x @ 0x8D => addressing.absolute_write(self.state, self, memory, Cpu::sta, x),
+                x @ 0x8E => addressing.absolute_write(self.state, self, memory, Cpu::stx, x),
+                x @ 0x90 => addressing.relative(self.state, self, memory, Cpu::bcc, x),
+                x @ 0x91 => addressing.indirect_indexed_write(self.state, self, memory, Cpu::sta, x),
+                x @ 0x94 => addressing.zero_page_indexed_write_x(self.state, self, memory, Cpu::sty, x),
+                x @ 0x95 => addressing.zero_page_indexed_write_x(self.state, self, memory, Cpu::sta, x),
+                x @ 0x98 => addressing.implied(self.state, self, Cpu::tya, x),
+                x @ 0x99 => addressing.absolute_indexed_write_y(self.state, self, memory, Cpu::sta, x),
+                x @ 0x9A => addressing.implied(self.state, self, Cpu::txs, x),
+                x @ 0x9D => addressing.absolute_indexed_write_x(self.state, self, memory, Cpu::sta, x),
+                x @ 0xA0 => addressing.immediate(self.state, self, memory, Cpu::ldy, x),
+                x @ 0xA2 => addressing.immediate(self.state, self, memory, Cpu::ldx, x),
+                x @ 0xA4 => addressing.zero_page_read(self.state, self, memory, Cpu::ldy, x),
+                x @ 0xA5 => addressing.zero_page_read(self.state, self, memory, Cpu::lda, x),
+                x @ 0xA6 => addressing.zero_page_read(self.state, self, memory, Cpu::ldx, x),
+                x @ 0xA8 => addressing.implied(self.state, self, Cpu::tay, x),
+                x @ 0xA9 => addressing.immediate(self.state, self, memory, Cpu::lda, x),
+                x @ 0xAA => addressing.implied(self.state, self, Cpu::tax, x),
+                x @ 0xAC => addressing.absolute_read(self.state, self, memory, Cpu::ldy, x),
+                x @ 0xAD => addressing.absolute_read(self.state, self, memory, Cpu::lda, x),
+                x @ 0xAE => addressing.absolute_read(self.state, self, memory, Cpu::ldx, x),
+                x @ 0xB0 => addressing.relative(self.state, self, memory, Cpu::bcs, x),
+                x @ 0xB1 => addressing.indirect_indexed_read(self.state, self, memory, Cpu::lda, x),
+                x @ 0xB4 => addressing.zero_page_indexed_read_x(self.state, self, memory, Cpu::ldy, x),
+                x @ 0xB5 => addressing.zero_page_indexed_read_x(self.state, self, memory, Cpu::lda, x),
+                x @ 0xB9 => addressing.absolute_indexed_read_y(self.state, self, memory, Cpu::lda, x),
+                x @ 0xBA => addressing.implied(self.state, self, Cpu::tsx, x),
+                x @ 0xBD => addressing.absolute_indexed_read_x(self.state, self, memory, Cpu::lda, x),
+                x @ 0xC0 => addressing.immediate(self.state, self, memory, Cpu::cpy, x),
+                x @ 0xC4 => addressing.zero_page_read(self.state, self, memory, Cpu::cpy, x),
+                x @ 0xC5 => addressing.zero_page_read(self.state, self, memory, Cpu::cmp, x),
+                x @ 0xC6 => addressing.zero_page_read_modify_write(self.state, self, memory, Cpu::dec, x),
+                x @ 0xC8 => addressing.implied(self.state, self, Cpu::iny, x),
+                x @ 0xC9 => addressing.immediate(self.state, self, memory, Cpu::cmp, x),
+                x @ 0xCA => addressing.implied(self.state, self, Cpu::dex, x),
+                x @ 0xCD => addressing.absolute_read(self.state, self, memory, Cpu::cmp, x),
+                x @ 0xCE => addressing.absolute_read_modify_write(self.state, self, memory, Cpu::dec, x),
+                x @ 0xD0 => addressing.relative(self.state, self, memory, Cpu::bne, x),
+                x @ 0xD1 => addressing.indirect_indexed_read(self.state, self, memory, Cpu::cmp, x),
+                x @ 0xD8 => addressing.implied(self.state, self, Cpu::cld, x),
+                x @ 0xDD => addressing.absolute_indexed_read_x(self.state, self, memory, Cpu::cmp, x),
+                x @ 0xE0 => addressing.immediate(self.state, self, memory, Cpu::cpx, x),
+                x @ 0xE4 => addressing.zero_page_read(self.state, self, memory, Cpu::cpx, x),
+                x @ 0xE5 => addressing.zero_page_read(self.state, self, memory, Cpu::sbc, x),
+                x @ 0xE6 => addressing.zero_page_read_modify_write(self.state, self, memory, Cpu::inc, x),
+                x @ 0xE8 => addressing.implied(self.state, self, Cpu::inx, x),
+                x @ 0xE9 => addressing.immediate(self.state, self, memory, Cpu::sbc, x),
+                x @ 0xEA => addressing.implied(self.state, self, Cpu::nop, x),
+                x @ 0xEC => addressing.absolute_read(self.state, self, memory, Cpu::cpx, x),
+                x @ 0xEE => addressing.absolute_read_modify_write(self.state, self, memory, Cpu::inc, x),
+                x @ 0xF0 => addressing.relative(self.state, self, memory, Cpu::beq, x),
+                x @ 0xF1 => addressing.indirect_indexed_read(self.state, self, memory, Cpu::sbc, x),
+                x @ 0xF9 => addressing.absolute_indexed_read_y(self.state, self, memory, Cpu::sbc, x),
+                x => Err(format!("Illegal opcode {:02X} at {:04X}", x, self.pc - 1))
+            }?;
+        }
 
         if self.state == 1 {
             cpu_logger.log(&self, &addressing);
@@ -230,8 +225,22 @@ impl Cpu {
         (self.p & 0x01) > 0
     }
 
+    pub fn get_interrupt_flag(&self) -> bool {
+        (self.p & 0x04) > 0
+    }
+
     pub fn get_negative_flag(&self) -> bool {
         (self.p & 0x80) > 0
+    }
+
+    pub fn get_overflow_flag(&self) -> bool {
+        (self.p & 0x40) > 0
+    }
+
+    pub fn interrupt(&mut self) {
+        if !self.get_interrupt_flag() {
+            self.interrupted = true;
+        }
     }
 
     // pub fn set_flag(&mut self, flag: Flag) {
@@ -487,6 +496,12 @@ impl Cpu {
         self.set_negative_and_zero_flags(self.a);
     }
 
+    pub fn tsx(&mut self) {
+        self.inst = "TSX";
+        self.x = self.sp;
+        self.set_negative_and_zero_flags(self.a);
+    }
+
     pub fn tay(&mut self) {
         self.inst = "TAY";
         self.y = self.a;
@@ -535,6 +550,11 @@ impl Cpu {
         !self.get_carry_flag()
     }
 
+    pub fn bvs(&mut self) -> bool {
+        self.inst = "BVS";
+        self.get_overflow_flag()
+    }
+
     pub fn beq(&mut self) -> bool {
         self.inst = "BEQ";
         self.get_zero_flag()
@@ -575,6 +595,12 @@ impl Cpu {
 
     pub fn inx(&mut self) {
         self.inst = "INX";
+        self.x = self.x.wrapping_add(1);
+        self.set_negative_and_zero_flags(self.x);
+    }
+
+    pub fn nop(&mut self) {
+        self.inst = "NOP";
         self.x = self.x.wrapping_add(1);
         self.set_negative_and_zero_flags(self.x);
     }

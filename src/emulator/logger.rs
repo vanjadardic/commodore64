@@ -17,13 +17,14 @@ pub struct CpuLogger {
     disabled: bool,
     disabled_until: u16,
     cnt: usize,
+    interrupted: bool,
 }
 
 #[cfg(debug_assertions)]
 impl CpuLogger {
     pub fn new() -> CpuLogger {
         CpuLogger {
-            enabled: true,
+            enabled: false,
             tick: 0,
             tick_tmp: 0,
             pc: 0,
@@ -36,6 +37,7 @@ impl CpuLogger {
             disabled: false,
             disabled_until: 0,
             cnt: 0,
+            interrupted: false,
         }
     }
 
@@ -51,6 +53,7 @@ impl CpuLogger {
         self.a = cpu.a;
         self.x = cpu.x;
         self.y = cpu.y;
+        // self.interrupted |= cpu.interrupted;
     }
 
     pub fn opcode(&mut self, opcode: u8) {
@@ -167,7 +170,7 @@ impl CpuLogger {
             //debug!("            end skip");
         }
 
-        if !self.disabled {
+        if self.interrupted || !self.disabled {
             debug!("{}", line);
         }
     }

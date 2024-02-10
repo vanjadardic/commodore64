@@ -8,6 +8,7 @@ use sdl2::pixels::PixelFormatEnum;
 use sdl2::video::FullscreenType;
 
 use crate::emulator::emulator::Emulator;
+use crate::emulator::keyboard::Key;
 
 const DEFAULT_SCREEN_SCALE: u32 = 4;
 const SCREEN_WIDTH: u32 = 320;
@@ -102,16 +103,12 @@ pub fn main() -> Result<(), String> {
                         FullscreenType::Off
                     }).unwrap();
                 }
-                // Event::KeyDown { keycode: Some(keycode), repeat: false, .. } =>
-                //     match decode(keycode) {
-                //         Some(key) => emulator.key_down(key),
-                //         None => ()
-                //     }
-                // Event::KeyUp { keycode: Some(keycode), repeat: false, .. } =>
-                //     match decode(keycode) {
-                //         Some(key) => emulator.key_up(key),
-                //         None => ()
-                //     }
+                Event::KeyDown { keycode: Some(keycode), repeat: false, .. } => {
+                    handle_keyboard_event(&mut emulator, keycode, true);
+                }
+                Event::KeyUp { keycode: Some(keycode), repeat: false, .. } => {
+                    handle_keyboard_event(&mut emulator, keycode, false);
+                }
                 _ => ()
             }
         }
@@ -149,4 +146,27 @@ pub fn main() -> Result<(), String> {
     }
 
     Ok(())
+}
+
+fn handle_keyboard_event(emulator: &mut Emulator, keycode: Keycode, pressed: bool) {
+    match keycode {
+        Keycode::A => emulator.key_change(Key::A, pressed),
+        Keycode::N => emulator.key_change(Key::N, pressed),
+        Keycode::B => emulator.key_change(Key::B, pressed),
+        Keycode::P => emulator.key_change(Key::P, pressed),
+        Keycode::R => emulator.key_change(Key::R, pressed),
+        Keycode::I => emulator.key_change(Key::I, pressed),
+        Keycode::G => emulator.key_change(Key::G, pressed),
+        Keycode::O => emulator.key_change(Key::O, pressed),
+        Keycode::T => emulator.key_change(Key::T, pressed),
+        Keycode::U => emulator.key_change(Key::U, pressed),
+        Keycode::Num0 => emulator.key_change(Key::N0, pressed),
+        Keycode::Num1 => emulator.key_change(Key::N1, pressed),
+        Keycode::Num2 => emulator.key_change(Key::N2, pressed),
+        Keycode::Space => emulator.key_change(Key::Space, pressed),
+        Keycode::Return => emulator.key_change(Key::Return, pressed),
+        Keycode::LShift => emulator.key_change(Key::LeftShift, pressed),
+        Keycode::RShift => emulator.key_change(Key::RightShift, pressed),
+        _ => {}
+    }
 }

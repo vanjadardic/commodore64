@@ -8,10 +8,12 @@ enum AddressingType {
     AbsoluteIndexedReadY,
     Relative,
     ImpliedRTS,
+    ImpliedRTI,
     Immediate,
     AbsoluteWrite,
     ZeroPageWrite,
     AbsoluteRead,
+    AbsoluteReadModifyWrite,
     AbsoluteJMP,
     AbsoluteIndexedWriteX,
     AbsoluteIndexedWriteY,
@@ -29,6 +31,7 @@ enum AddressingType {
     AbsoluteIndirectJMP,
     ImpliedPHA,
     ImpliedPLA,
+    ImpliedIRQ,
 }
 
 pub struct Addressing {
@@ -60,7 +63,7 @@ impl Addressing {
         self.operand2 = None;
     }
 
-    fn read_operand(&mut self, memory: &Memory, cpu: &mut Cpu) -> u8 {
+    fn read_operand(&mut self, memory: &mut Memory, cpu: &mut Cpu) -> u8 {
         let value = memory.get_from_word(cpu.get_and_increment_pc());
         if self.operand1 == None {
             self.operand1 = Some(value);
@@ -101,6 +104,9 @@ impl Addressing {
             AddressingType::ImpliedRTS => {
                 String::from("")
             }
+            AddressingType::ImpliedRTI => {
+                String::from("")
+            }
             AddressingType::AbsoluteWrite => {
                 format!("${:02X}{:02X}", self.operand2.unwrap(), self.operand1.unwrap())
             }
@@ -108,6 +114,9 @@ impl Addressing {
                 format!("#${:02X}", self.operand1.unwrap())
             }
             AddressingType::AbsoluteRead => {
+                format!("${:02X}{:02X}", self.operand2.unwrap(), self.operand1.unwrap())
+            }
+            AddressingType::AbsoluteReadModifyWrite => {
                 format!("${:02X}{:02X}", self.operand2.unwrap(), self.operand1.unwrap())
             }
             AddressingType::AbsoluteJMP => {
@@ -161,10 +170,13 @@ impl Addressing {
             // AddressingType::ZeroPageIndexedReadModifyWriteY => {
             //     format!("${:02X},Y", self.operand1.unwrap())
             // }
+            AddressingType::ImpliedIRQ => {
+                String::from("")
+            }
         }
     }
 
-    pub fn immediate(&mut self, sub_tick: u8, cpu: &mut Cpu, memory: &Memory, inst: fn(&mut Cpu, u8), opcode: u8) -> Result<u8, String> {
+    pub fn immediate(&mut self, sub_tick: u8, cpu: &mut Cpu, memory: &mut Memory, inst: fn(&mut Cpu, u8), opcode: u8) -> Result<u8, String> {
         if sub_tick == 2 {
             self.set_addressing_type(AddressingType::Immediate);
             let value = self.read_operand(memory, cpu);
@@ -211,7 +223,7 @@ impl Addressing {
         Err(format!("Illegal sub_tick {} for opcode {:02X}", sub_tick, opcode))
     }
 
-    fn absolute_indexed_read(&mut self, sub_tick: u8, cpu: &mut Cpu, memory: &Memory, inst: fn(&mut Cpu, u8), index: u8, opcode: u8) -> Result<u8, String> {
+    fn absolute_indexed_read(&mut self, sub_tick: u8, cpu: &mut Cpu, memory: &mut Memory, inst: fn(&mut Cpu, u8), index: u8, opcode: u8) -> Result<u8, String> {
         if sub_tick == 2 {
             self.low = self.read_operand(memory, cpu);
             return Ok(sub_tick + 1);
@@ -237,21 +249,21 @@ impl Addressing {
         Err(format!("Illegal sub_tick {} for opcode {:02X}", sub_tick, opcode))
     }
 
-    pub fn absolute_indexed_read_x(&mut self, sub_tick: u8, cpu: &mut Cpu, memory: &Memory, inst: fn(&mut Cpu, u8), opcode: u8) -> Result<u8, String> {
+    pub fn absolute_indexed_read_x(&mut self, sub_tick: u8, cpu: &mut Cpu, memory: &mut Memory, inst: fn(&mut Cpu, u8), opcode: u8) -> Result<u8, String> {
         if sub_tick == 2 {
             self.set_addressing_type(AddressingType::AbsoluteIndexedReadX);
         }
         self.absolute_indexed_read(sub_tick, cpu, memory, inst, cpu.x, opcode)
     }
 
-    pub fn absolute_indexed_read_y(&mut self, sub_tick: u8, cpu: &mut Cpu, memory: &Memory, inst: fn(&mut Cpu, u8), opcode: u8) -> Result<u8, String> {
+    pub fn absolute_indexed_read_y(&mut self, sub_tick: u8, cpu: &mut Cpu, memory: &mut Memory, inst: fn(&mut Cpu, u8), opcode: u8) -> Result<u8, String> {
         if sub_tick == 2 {
             self.set_addressing_type(AddressingType::AbsoluteIndexedReadY);
         }
         self.absolute_indexed_read(sub_tick, cpu, memory, inst, cpu.y, opcode)
     }
 
-    pub fn relative(&mut self, sub_tick: u8, cpu: &mut Cpu, memory: &Memory, inst: fn(&mut Cpu) -> bool, opcode: u8) -> Result<u8, String> {
+    pub fn relative(&mut self, sub_tick: u8, cpu: &mut Cpu, memory: &mut Memory, inst: fn(&mut Cpu) -> bool, opcode: u8) -> Result<u8, String> {
         if sub_tick == 2 {
             self.set_addressing_type(AddressingType::Relative);
             self.latch = self.read_operand(memory, cpu);
@@ -318,6 +330,33 @@ impl Addressing {
         Err(format!("Illegal sub_tick {} for opcode {:02X}", sub_tick, opcode))
     }
 
+    pub fn implied_rti(&mut self, sub_tick: u8, cpu: &mut Cpu, memory: &Memory, opcode: u8) -> Result<u8, String> {
+        if sub_tick == 2 {
+            self.set_addressing_type(AddressingType::ImpliedRTI);
+            return Ok(sub_tick + 1);
+        }
+        if sub_tick == 3 {
+            cpu.sp = cpu.sp.wrapping_add(1);
+            return Ok(sub_tick + 1);
+        }
+        if sub_tick == 4 {
+            cpu.p = memory.get_stack(cpu.sp);
+            cpu.sp = cpu.sp.wrapping_add(1);
+            return Ok(sub_tick + 1);
+        }
+        if sub_tick == 5 {
+            cpu.set_pcl(memory.get_stack(cpu.sp));
+            cpu.sp = cpu.sp.wrapping_add(1);
+            return Ok(sub_tick + 1);
+        }
+        if sub_tick == 6 {
+            cpu.set_pch(memory.get_stack(cpu.sp));
+            cpu.inst = "RTI";
+            return Ok(1);
+        }
+        Err(format!("Illegal sub_tick {} for opcode {:02X}", sub_tick, opcode))
+    }
+
     pub fn absolute_write(&mut self, sub_tick: u8, cpu: &mut Cpu, memory: &mut Memory, inst: fn(&mut Cpu) -> u8, opcode: u8) -> Result<u8, String> {
         if sub_tick == 2 {
             self.set_addressing_type(AddressingType::AbsoluteWrite);
@@ -348,7 +387,7 @@ impl Addressing {
         Err(format!("Illegal sub_tick {} for opcode {:02X}", sub_tick, opcode))
     }
 
-    pub fn absolute_read(&mut self, sub_tick: u8, cpu: &mut Cpu, memory: &Memory, inst: fn(&mut Cpu, u8), opcode: u8) -> Result<u8, String> {
+    pub fn absolute_read(&mut self, sub_tick: u8, cpu: &mut Cpu, memory: &mut Memory, inst: fn(&mut Cpu, u8), opcode: u8) -> Result<u8, String> {
         if sub_tick == 2 {
             self.set_addressing_type(AddressingType::AbsoluteRead);
             self.low = self.read_operand(memory, cpu);
@@ -365,7 +404,31 @@ impl Addressing {
         Err(format!("Illegal sub_tick {} for opcode {:02X}", sub_tick, opcode))
     }
 
-    pub fn absolute_jmp(&mut self, sub_tick: u8, cpu: &mut Cpu, memory: &Memory, opcode: u8) -> Result<u8, String> {
+    pub fn absolute_read_modify_write(&mut self, sub_tick: u8, cpu: &mut Cpu, memory: &mut Memory, inst: fn(&mut Cpu, u8) -> u8, opcode: u8) -> Result<u8, String> {
+        if sub_tick == 2 {
+            self.set_addressing_type(AddressingType::AbsoluteReadModifyWrite);
+            self.low = self.read_operand(memory, cpu);
+            return Ok(sub_tick + 1);
+        }
+        if sub_tick == 3 {
+            self.high = self.read_operand(memory, cpu);
+            return Ok(sub_tick + 1);
+        }
+        if sub_tick == 4 {
+            return Ok(sub_tick + 1);
+        }
+        if sub_tick == 5 {
+            return Ok(sub_tick + 1);
+        }
+        if sub_tick == 6 {
+            let value = inst(cpu, memory.get_from_low_high(self.low, self.high));
+            memory.set_from_low_high(self.low, self.high, value);
+            return Ok(1);
+        }
+        Err(format!("Illegal sub_tick {} for opcode {:02X}", sub_tick, opcode))
+    }
+
+    pub fn absolute_jmp(&mut self, sub_tick: u8, cpu: &mut Cpu, memory: &mut Memory, opcode: u8) -> Result<u8, String> {
         if sub_tick == 2 {
             self.set_addressing_type(AddressingType::AbsoluteJMP);
             self.low = self.read_operand(memory, cpu);
@@ -438,7 +501,7 @@ impl Addressing {
         Err(format!("Illegal sub_tick {} for opcode {:02X}", sub_tick, opcode))
     }
 
-    pub fn indirect_indexed_read(&mut self, sub_tick: u8, cpu: &mut Cpu, memory: &Memory, inst: fn(&mut Cpu, u8), opcode: u8) -> Result<u8, String> {
+    pub fn indirect_indexed_read(&mut self, sub_tick: u8, cpu: &mut Cpu, memory: &mut Memory, inst: fn(&mut Cpu, u8), opcode: u8) -> Result<u8, String> {
         if sub_tick == 2 {
             self.set_addressing_type(AddressingType::IndirectIndexedRead);
             self.latch = self.read_operand(memory, cpu);
@@ -506,7 +569,7 @@ impl Addressing {
         Err(format!("Illegal sub_tick {} for opcode {:02X}", sub_tick, opcode))
     }
 
-    pub fn zero_page_read(&mut self, sub_tick: u8, cpu: &mut Cpu, memory: &Memory, inst: fn(&mut Cpu, u8), opcode: u8) -> Result<u8, String> {
+    pub fn zero_page_read(&mut self, sub_tick: u8, cpu: &mut Cpu, memory: &mut Memory, inst: fn(&mut Cpu, u8), opcode: u8) -> Result<u8, String> {
         if sub_tick == 2 {
             self.set_addressing_type(AddressingType::ZeroPageRead);
             self.low = self.read_operand(memory, cpu);
@@ -549,7 +612,7 @@ impl Addressing {
     //     self.zero_page_indexed_write(sub_tick, cpu, memory, inst, cpu.y, opcode)
     // }
 
-    fn zero_page_indexed_read(&mut self, sub_tick: u8, cpu: &mut Cpu, memory: &Memory, inst: fn(&mut Cpu, u8), index: u8, opcode: u8) -> Result<u8, String> {
+    fn zero_page_indexed_read(&mut self, sub_tick: u8, cpu: &mut Cpu, memory: &mut Memory, inst: fn(&mut Cpu, u8), index: u8, opcode: u8) -> Result<u8, String> {
         if sub_tick == 2 {
             self.low = self.read_operand(memory, cpu);
             return Ok(sub_tick + 1);
@@ -565,7 +628,7 @@ impl Addressing {
         Err(format!("Illegal sub_tick {} for opcode {:02X}", sub_tick, opcode))
     }
 
-    pub fn zero_page_indexed_read_x(&mut self, sub_tick: u8, cpu: &mut Cpu, memory: &Memory, inst: fn(&mut Cpu, u8), opcode: u8) -> Result<u8, String> {
+    pub fn zero_page_indexed_read_x(&mut self, sub_tick: u8, cpu: &mut Cpu, memory: &mut Memory, inst: fn(&mut Cpu, u8), opcode: u8) -> Result<u8, String> {
         if sub_tick == 2 {
             self.set_addressing_type(AddressingType::ZeroPageIndexedReadX);
         }
@@ -616,7 +679,7 @@ impl Addressing {
     //     self.zero_page_indexed_read_modify_write(sub_tick, cpu, memory, inst, cpu.y, opcode)
     // }
 
-    pub fn absolute_indirect_jmp(&mut self, sub_tick: u8, cpu: &mut Cpu, memory: &Memory, opcode: u8) -> Result<u8, String> {
+    pub fn absolute_indirect_jmp(&mut self, sub_tick: u8, cpu: &mut Cpu, memory: &mut Memory, opcode: u8) -> Result<u8, String> {
         if sub_tick == 2 {
             self.set_addressing_type(AddressingType::AbsoluteIndirectJMP);
             self.low = self.read_operand(memory, cpu);
@@ -666,5 +729,38 @@ impl Addressing {
             return Ok(1);
         }
         Err(format!("Illegal sub_tick {} for opcode {:02X}", sub_tick, opcode))
+    }
+
+    pub fn implied_irq(&mut self, sub_tick: u8, cpu: &mut Cpu, memory: &mut Memory) -> Result<u8, String> {
+        if sub_tick == 2 {
+            self.set_addressing_type(AddressingType::ImpliedIRQ);
+            return Ok(sub_tick + 1);
+        }
+        if sub_tick == 3 {
+            memory.set_stack(cpu.sp, cpu.get_pch());
+            cpu.sp = cpu.sp.wrapping_sub(1);
+            return Ok(sub_tick + 1);
+        }
+        if sub_tick == 4 {
+            memory.set_stack(cpu.sp, cpu.get_pcl());
+            cpu.sp = cpu.sp.wrapping_sub(1);
+            return Ok(sub_tick + 1);
+        }
+        if sub_tick == 5 {
+            memory.set_stack(cpu.sp, cpu.p);
+            cpu.sp = cpu.sp.wrapping_sub(1);
+            return Ok(sub_tick + 1);
+        }
+        if sub_tick == 6 {
+            cpu.set_pcl(memory.get_from_word(0xFFFE));
+            return Ok(sub_tick + 1);
+        }
+        if sub_tick == 7 {
+            cpu.set_pch(memory.get_from_word(0xFFFF));
+            cpu.inst = "IRQ";
+            cpu.interrupted = false;
+            return Ok(1);
+        }
+        Err(format!("Illegal sub_tick {} for opcode IRQ", sub_tick))
     }
 }

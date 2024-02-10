@@ -1,3 +1,4 @@
+use crate::emulator::memory::cia1::Cia1;
 use crate::emulator::memory::cia2::Cia2;
 use crate::emulator::memory::color_ram::ColorRAM;
 use crate::emulator::memory::gpu::Gpu;
@@ -5,6 +6,7 @@ use crate::emulator::memory::gpu::Gpu;
 mod color_ram;
 mod cia2;
 mod gpu;
+pub mod cia1;
 
 const BASIC: &[u8] = include_bytes!("basic.901226-01.bin");
 const KERNAL: &[u8] = include_bytes!("kernal.901227-03.bin");
@@ -13,6 +15,7 @@ const CHARACTERS: &[u8] = include_bytes!("characters.901225-01.bin");
 pub struct Memory {
     data: [u8; 0xFFFF],
     color_ram: ColorRAM,
+    cia1: Cia1,
     cia2: Cia2,
     gpu: Gpu,
 }
@@ -25,12 +28,13 @@ impl Memory {
         Memory {
             data,
             color_ram: ColorRAM::new(),
+            cia1: Cia1::new(),
             cia2: Cia2::new(),
             gpu: Gpu::new(),
         }
     }
 
-    fn get(&self, loc: usize) -> u8 {
+    fn get(&mut self, loc: usize) -> u8 {
         if loc >= 0xA000 && loc <= 0xBFFF && (self.data[0x0001] & 0x03) == 0x03 {
             return BASIC[loc - 0xA000];
         }
@@ -49,7 +53,7 @@ impl Memory {
             } else if loc >= 0xD800 && loc <= 0xDBFF {
                 return self.color_ram.get(loc - 0xD800);
             } else if loc >= 0xDC00 && loc <= 0xDCFF {
-                //debug!("CIA #1 get {:04X}", loc);
+                return self.cia1.get(((loc - 0xDC00) % 16) + 0xDC00);
             } else if loc >= 0xDD00 && loc <= 0xDDFF {
                 return self.cia2.get(((loc - 0xDD00) % 16) + 0xDD00);
             } else if loc >= 0xDE00 && loc <= 0xDEFF {
@@ -81,7 +85,7 @@ impl Memory {
                 } else if loc >= 0xD800 && loc <= 0xDBFF {
                     self.color_ram.set(loc - 0xD800, value);
                 } else if loc >= 0xDC00 && loc <= 0xDCFF {
-                    //debug!("CIA #1 set {:04X} = {:02X}", loc, value);
+                    return self.cia1.set(((loc - 0xDC00) % 16) + 0xDC00, value);
                 } else if loc >= 0xDD00 && loc <= 0xDDFF {
                     return self.cia2.set(((loc - 0xDD00) % 16) + 0xDD00, value);
                 } else if loc >= 0xDE00 && loc <= 0xDEFF {
@@ -106,7 +110,7 @@ impl Memory {
         self.set(low as usize, value);
     }
 
-    pub fn get_from_low(&self, low: u8) -> u8 {
+    pub fn get_from_low(&mut self, low: u8) -> u8 {
         self.get(low as usize)
     }
 
@@ -114,11 +118,11 @@ impl Memory {
         self.set((((low as u16) & 0x00FF) | (((high as u16) << 8) & 0xFF00)) as usize, value);
     }
 
-    pub fn get_from_word(&self, loc: u16) -> u8 {
+    pub fn get_from_word(&mut self, loc: u16) -> u8 {
         self.get(loc as usize)
     }
 
-    pub fn get_from_low_high(&self, low: u8, high: u8) -> u8 {
+    pub fn get_from_low_high(&mut self, low: u8, high: u8) -> u8 {
         self.get((((low as u16) & 0x00FF) | (((high as u16) << 8) & 0xFF00)) as usize)
     }
 
@@ -128,6 +132,10 @@ impl Memory {
 
     pub fn get_stack(&self, sp: u8) -> u8 {
         self.data[sp as usize | 0x0100]
+    }
+
+    pub fn cia1(&mut self) -> &mut Cia1 {
+        &mut self.cia1
     }
 
     pub fn cia2(&self) -> &Cia2 {
